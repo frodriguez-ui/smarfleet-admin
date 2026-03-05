@@ -5,7 +5,7 @@ import {
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
   Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
-  Bell, Megaphone, Send, Info
+  Bell, Megaphone, Send, Info, ChevronLeft
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -29,6 +29,36 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
+
+// ============================================================================
+// --- COMPONENTE AUXILIAR (PAGINACIÓN) ---
+// ============================================================================
+const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange }) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (totalPages <= 1) return null;
+
+    return (
+        <div className="flex flex-col items-center gap-3 p-6 bg-white border-t border-slate-100">
+            <div className="flex items-center gap-1.5">
+                <button disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors text-slate-600 shadow-sm"><ChevronLeft size={16} /></button>
+                <div className="flex items-center gap-1">
+                    {[...Array(totalPages)].map((_, i) => {
+                        const pageNum = i + 1;
+                        return (
+                            <button key={pageNum} onClick={() => onPageChange(pageNum)} className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${currentPage === pageNum ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                {pageNum}
+                            </button>
+                        );
+                    })}
+                </div>
+                <button disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors text-slate-600 shadow-sm rotate-180"><ChevronLeft size={16} /></button>
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
+                Página {currentPage} de {totalPages} ({totalItems} resultados)
+            </p>
+        </div>
+    );
+};
 
 // ============================================================================
 // --- COMPONENTES MODULARES (MODALES) ---
@@ -389,6 +419,17 @@ const AdminDashboard = () => {
   // Estado para Gráficas Analíticas
   const [trendMonthsRange, setTrendMonthsRange] = useState(6);
 
+  // --- ESTADOS PARA PAGINACIÓN ---
+  const [pageUsers, setPageUsers] = useState(1);
+  const [pagePubs, setPagePubs] = useState(1);
+  const [pageConns, setPageConns] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  // Reseteo de páginas al cambiar filtros
+  useEffect(() => setPageUsers(1), [usersFilter]);
+  useEffect(() => setPagePubs(1), [pubsFilter]);
+  useEffect(() => setPageConns(1), [connsFilter]);
+
   // Escuchar colecciones principales de Firebase
   useEffect(() => {
     // 1. Usuarios (Collection Group Query)
@@ -626,6 +667,10 @@ const AdminDashboard = () => {
       };
   }, [users, allPublications, connections, trendMonthsRange]);
 
+  // Paginación de arreglos finales
+  const pagedUsers = filteredUsers.slice((pageUsers - 1) * ITEMS_PER_PAGE, pageUsers * ITEMS_PER_PAGE);
+  const pagedPubs = filteredPubs.slice((pagePubs - 1) * ITEMS_PER_PAGE, pagePubs * ITEMS_PER_PAGE);
+  const pagedConns = filteredConns.slice((pageConns - 1) * ITEMS_PER_PAGE, pageConns * ITEMS_PER_PAGE);
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-left font-sans">
@@ -1042,7 +1087,7 @@ const AdminDashboard = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredUsers.length > 0 ? filteredUsers.map(u => (
+                            {pagedUsers.length > 0 ? pagedUsers.map(u => (
                                 <tr key={u.id} className={`transition-colors ${u.isSuspended ? 'bg-rose-50/30 hover:bg-rose-50/50' : 'hover:bg-slate-50/50'}`}>
                                     <td className="p-5">
                                         <div className="flex items-center gap-2">
@@ -1083,6 +1128,7 @@ const AdminDashboard = () => {
                         </tbody>
                     </table>
                 </div>
+                <Pagination currentPage={pageUsers} totalItems={filteredUsers.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPageUsers} />
             </div>
         )}
 
@@ -1140,7 +1186,7 @@ const AdminDashboard = () => {
                              </tr>
                          </thead>
                          <tbody className="divide-y divide-slate-100">
-                             {filteredPubs.length > 0 ? filteredPubs.map(pub => (
+                             {pagedPubs.length > 0 ? pagedPubs.map(pub => (
                                  <tr key={pub.id} className="hover:bg-slate-50/50 transition-colors">
                                      <td className="p-5">
                                          <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider mb-1.5 border ${pub.type === 'trip' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
@@ -1175,6 +1221,7 @@ const AdminDashboard = () => {
                          </tbody>
                      </table>
                  </div>
+                 <Pagination currentPage={pagePubs} totalItems={filteredPubs.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPagePubs} />
              </div>
         )}
 
@@ -1224,7 +1271,7 @@ const AdminDashboard = () => {
                              </tr>
                          </thead>
                          <tbody className="divide-y divide-slate-100">
-                             {filteredConns.length > 0 ? filteredConns.map(conn => (
+                             {pagedConns.length > 0 ? pagedConns.map(conn => (
                                  <tr key={conn.id} className="hover:bg-slate-50/50 transition-colors">
                                      <td className="p-5">
                                          <p className="text-xs font-bold text-blue-600 mb-1.5 flex items-center gap-1.5"><MapPin size={12}/> De: <span className="text-slate-800">{conn.fromName}</span></p>
@@ -1254,6 +1301,7 @@ const AdminDashboard = () => {
                          </tbody>
                      </table>
                  </div>
+                 <Pagination currentPage={pageConns} totalItems={filteredConns.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPageConns} />
              </div>
         )}
 
