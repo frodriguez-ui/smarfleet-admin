@@ -126,16 +126,29 @@ const AdminLogin = () => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      
+      const docPath = `artifacts/${projectId}/users/${user.uid}/profile/data`;
       const profileSnap = await getDoc(doc(db, 'artifacts', projectId, 'users', user.uid, 'profile', 'data'));
       
-      if (profileSnap.exists() && profileSnap.data().isAdmin === true) {
-         navigate('/dashboard');
+      if (profileSnap.exists()) {
+         const data = profileSnap.data();
+         
+         // Verificación más flexible: Acepta booleano true o string "true"
+         if (data.isAdmin === true || String(data.isAdmin).toLowerCase() === "true") {
+             navigate('/dashboard');
+         } else {
+             await signOut(auth);
+             // Mostrar exactamente qué valor leyó la base de datos para depurar
+             setError(`Acceso denegado. El campo isAdmin en Firebase tiene el valor: "${data.isAdmin}". Debe ser true.`);
+         }
       } else {
          await signOut(auth);
-         setError("Acceso denegado. No eres administrador.");
+         // Mostrar la ruta exacta donde se está buscando
+         setError(`Error: Documento de perfil no encontrado en la ruta: ${docPath}`);
       }
     } catch (err) {
-      setError("Credenciales incorrectas o acceso restringido.");
+      console.error(err);
+      setError("Credenciales incorrectas o error de red.");
     } finally {
       setLoading(false);
     }
