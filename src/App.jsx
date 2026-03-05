@@ -183,6 +183,11 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
         totalConns: userConns.length
     };
 
+    // Extraer fecha de vencimiento
+    const expDate = user.subscriptionEndsAt?.seconds 
+        ? new Date(user.subscriptionEndsAt.seconds * 1000).toLocaleDateString() 
+        : (user.currentPeriodEnd?.seconds ? new Date(user.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
             <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -206,7 +211,7 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
                                     {user.role === 'carrier' ? 'Transportista' : 'Generador'}
                                 </span>
                                 <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] border ${user.tier === 'premium' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                    {user.tier === 'premium' ? 'PREMIUM' : 'FREE'}
+                                    {user.tier === 'premium' ? `PREMIUM (Vence: ${expDate})` : 'FREE'}
                                 </span>
                             </div>
                         </div>
@@ -1087,7 +1092,12 @@ const AdminDashboard = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {pagedUsers.length > 0 ? pagedUsers.map(u => (
+                            {pagedUsers.length > 0 ? pagedUsers.map(u => {
+                                const expDate = u.subscriptionEndsAt?.seconds 
+                                    ? new Date(u.subscriptionEndsAt.seconds * 1000).toLocaleDateString() 
+                                    : (u.currentPeriodEnd?.seconds ? new Date(u.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
+
+                                return (
                                 <tr key={u.id} className={`transition-colors ${u.isSuspended ? 'bg-rose-50/30 hover:bg-rose-50/50' : 'hover:bg-slate-50/50'}`}>
                                     <td className="p-5">
                                         <div className="flex items-center gap-2">
@@ -1106,7 +1116,10 @@ const AdminDashboard = () => {
                                     </td>
                                     <td className="p-5">
                                         {u.tier === 'premium' ? (
-                                            <span className={`flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1 rounded-lg w-max ${u.isSuspended ? 'opacity-50' : ''}`}><AlertTriangle size={12}/> Premium</span>
+                                            <div className="flex flex-col gap-1.5">
+                                                <span className={`flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1 rounded-lg w-max ${u.isSuspended ? 'opacity-50' : ''}`}><AlertTriangle size={12}/> Premium</span>
+                                                <span className={`text-[9px] font-bold text-slate-400 uppercase tracking-widest ${u.isSuspended ? 'opacity-50' : ''}`}>Vence: {expDate}</span>
+                                            </div>
                                         ) : (
                                             <span className={`text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg ${u.isSuspended ? 'opacity-50' : ''}`}>Free</span>
                                         )}
@@ -1120,7 +1133,7 @@ const AdminDashboard = () => {
                                         </button>
                                     </td>
                                 </tr>
-                            )) : (
+                            )}) : (
                                 <tr>
                                     <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No se encontraron usuarios con esos filtros.</td>
                                 </tr>
