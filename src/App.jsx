@@ -4,7 +4,7 @@ import {
   Shield, Users, Truck, Package, LogOut, 
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
-  Leaf, TrendingUp, BarChart3, Activity
+  Leaf, TrendingUp, BarChart3, Activity, Ban
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -43,7 +43,8 @@ const EditUserModal = ({ user, onClose }) => {
             await updateDoc(userRef, {
                 tier: formData.tier,
                 businessName: formData.businessName,
-                isAdmin: formData.isAdmin || false
+                isAdmin: formData.isAdmin || false,
+                isSuspended: formData.isSuspended || false // 🔥 Nueva bandera de suspensión
             });
             onClose();
         } catch (e) {
@@ -54,14 +55,34 @@ const EditUserModal = ({ user, onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-            <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl animate-in zoom-in-95">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-black text-slate-800">Gestionar Usuario</h3>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full"><X size={20}/></button>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
                 <div className="space-y-5">
+                    {/* 🔥 PANEL DE ESTADO DE CUENTA (MODERACIÓN) 🔥 */}
+                    <div className={`p-4 rounded-2xl border flex items-center justify-between transition-colors ${formData.isSuspended ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                        <div>
+                            <p className={`text-xs font-black uppercase tracking-widest flex items-center gap-1.5 ${formData.isSuspended ? 'text-rose-800' : 'text-emerald-800'}`}>
+                                {formData.isSuspended ? <Ban size={14}/> : <CheckCircle size={14}/>}
+                                {formData.isSuspended ? 'Cuenta Suspendida' : 'Cuenta Activa'}
+                            </p>
+                            <p className={`text-[10px] font-medium mt-1 ${formData.isSuspended ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                {formData.isSuspended ? 'El usuario no puede acceder a la app.' : 'El usuario opera con normalidad.'}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setFormData({...formData, isSuspended: !formData.isSuspended})}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-sm ${formData.isSuspended ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' : 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'}`}
+                        >
+                            {formData.isSuspended ? 'Reactivar' : 'Suspender'}
+                        </button>
+                    </div>
+
                     <div>
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Empresa</label>
                         <input 
@@ -85,12 +106,12 @@ const EditUserModal = ({ user, onClose }) => {
 
                     <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
                         <div>
-                            <p className="text-xs font-bold text-blue-800">Privilegios Admin</p>
-                            <p className="text-[10px] text-blue-600">Permite acceso a este panel.</p>
+                            <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><Shield size={14}/> Privilegios Admin</p>
+                            <p className="text-[10px] font-medium text-blue-600 mt-1">Permite acceso a este panel.</p>
                         </div>
                         <input 
                             type="checkbox" 
-                            className="w-5 h-5 accent-blue-600"
+                            className="w-5 h-5 accent-blue-600 cursor-pointer"
                             checked={formData.isAdmin || false}
                             onChange={e => setFormData({...formData, isAdmin: e.target.checked})}
                         />
@@ -100,7 +121,7 @@ const EditUserModal = ({ user, onClose }) => {
                 <button 
                     onClick={handleSave}
                     disabled={loading}
-                    className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl mt-8 hover:bg-slate-800 transition-all disabled:opacity-50"
+                    className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl mt-8 hover:bg-slate-800 transition-all disabled:opacity-50 shadow-xl shadow-slate-900/20"
                 >
                     {loading ? "Guardando..." : "Actualizar Perfil"}
                 </button>
@@ -211,7 +232,7 @@ const AdminDashboard = () => {
   const [dbError, setDbError] = useState(null);
 
   // --- ESTADOS PARA FILTROS ---
-  const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all' });
+  const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all', status: 'all' });
   const [pubsFilter, setPubsFilter] = useState({ search: '', type: 'all', status: 'all' });
   const [connsFilter, setConnsFilter] = useState({ search: '', status: 'all' });
 
@@ -291,8 +312,14 @@ const AdminDashboard = () => {
           
           const matchesRole = usersFilter.role === 'all' || u.role === usersFilter.role;
           const matchesTier = usersFilter.tier === 'all' || u.tier === usersFilter.tier;
+          
+          // Filtro por estado (Activo/Suspendido)
+          const isSuspended = u.isSuspended === true;
+          const matchesStatus = usersFilter.status === 'all' 
+              || (usersFilter.status === 'active' && !isSuspended) 
+              || (usersFilter.status === 'suspended' && isSuspended);
 
-          return matchesSearch && matchesRole && matchesTier;
+          return matchesSearch && matchesRole && matchesTier && matchesStatus;
       });
   }, [users, usersFilter]);
 
@@ -331,6 +358,7 @@ const AdminDashboard = () => {
   const stats = useMemo(() => {
       const carriers = users.filter(u => u.role === 'carrier').length;
       const shippers = users.filter(u => u.role === 'shipper').length;
+      const suspended = users.filter(u => u.isSuspended).length;
       
       const activePubs = allPublications.filter(p => p.status === 'active').length;
       const completedPubs = allPublications.filter(p => p.status === 'completed').length;
@@ -349,7 +377,7 @@ const AdminDashboard = () => {
       const totalCo2SavedTons = (totalCo2SavedKg / 1000).toFixed(1); // Convertir a Toneladas
 
       return {
-          carriers, shippers,
+          carriers, shippers, suspended,
           activePubs, completedPubs, pausedPubs,
           totalKmSaved,
           totalCo2SavedTons,
@@ -425,6 +453,7 @@ const AdminDashboard = () => {
                         <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4"><Users size={24}/></div>
                         <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Usuarios Registrados</p>
                         <p className="text-4xl font-black text-slate-800 mt-1">{users.length}</p>
+                        {stats.suspended > 0 && <p className="text-xs font-bold text-rose-500 mt-2 flex items-center gap-1"><Ban size={12}/> {stats.suspended} Suspendidos</p>}
                     </div>
                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                         <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Truck size={24}/></div>
@@ -561,10 +590,19 @@ const AdminDashboard = () => {
                         </div>
                         <select 
                             className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
+                            value={usersFilter.status}
+                            onChange={e => setUsersFilter({...usersFilter, status: e.target.value})}
+                        >
+                            <option value="all">Estado: Todos</option>
+                            <option value="active">Activos</option>
+                            <option value="suspended">Suspendidos</option>
+                        </select>
+                        <select 
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
                             value={usersFilter.role}
                             onChange={e => setUsersFilter({...usersFilter, role: e.target.value})}
                         >
-                            <option value="all">Todos los Roles</option>
+                            <option value="all">Rol: Todos</option>
                             <option value="carrier">Transportistas</option>
                             <option value="shipper">Generadores</option>
                         </select>
@@ -573,7 +611,7 @@ const AdminDashboard = () => {
                             value={usersFilter.tier}
                             onChange={e => setUsersFilter({...usersFilter, tier: e.target.value})}
                         >
-                            <option value="all">Todos los Planes</option>
+                            <option value="all">Plan: Todos</option>
                             <option value="premium">Premium</option>
                             <option value="free">Free</option>
                         </select>
@@ -592,28 +630,31 @@ const AdminDashboard = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {filteredUsers.length > 0 ? filteredUsers.map(u => (
-                                <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                                <tr key={u.id} className={`transition-colors ${u.isSuspended ? 'bg-rose-50/30 hover:bg-rose-50/50' : 'hover:bg-slate-50/50'}`}>
                                     <td className="p-5">
                                         <div className="flex items-center gap-2">
                                             {u.isAdmin && <Shield size={14} className="text-blue-500" title="Administrador"/>}
-                                            <p className="font-bold text-slate-800">{u.businessName || 'Sin nombre'}</p>
+                                            <p className={`font-bold ${u.isSuspended ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{u.businessName || 'Sin nombre'}</p>
                                         </div>
-                                        <p className="text-xs text-slate-500 font-medium">{u.email || u.id}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <p className="text-xs text-slate-500 font-medium">{u.email || u.id}</p>
+                                            {u.isSuspended && <span className="bg-rose-100 text-rose-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Ban size={8}/> Suspendido</span>}
+                                        </div>
                                     </td>
                                     <td className="p-5">
-                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${u.role === 'carrier' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
+                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${u.role === 'carrier' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'} ${u.isSuspended ? 'opacity-50' : ''}`}>
                                             {u.role === 'carrier' ? 'Transportista' : 'Generador'}
                                         </span>
                                     </td>
                                     <td className="p-5">
                                         {u.tier === 'premium' ? (
-                                            <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1 rounded-lg w-max"><AlertTriangle size={12}/> Premium</span>
+                                            <span className={`flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1 rounded-lg w-max ${u.isSuspended ? 'opacity-50' : ''}`}><AlertTriangle size={12}/> Premium</span>
                                         ) : (
-                                            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">Free</span>
+                                            <span className={`text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg ${u.isSuspended ? 'opacity-50' : ''}`}>Free</span>
                                         )}
                                     </td>
                                     <td className="p-5 text-right">
-                                        <button onClick={() => setEditingUser(u)} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 ml-auto">
+                                        <button onClick={() => setEditingUser(u)} className={`px-4 py-2 border text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 ml-auto ${u.isSuspended ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 hover:border-rose-300' : 'bg-white border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300'}`}>
                                             <Edit size={14}/> Editar
                                         </button>
                                     </td>
