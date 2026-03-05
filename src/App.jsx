@@ -128,12 +128,14 @@ const AdminLogin = () => {
       const user = userCredential.user;
       
       const docPath = `artifacts/${projectId}/users/${user.uid}/profile/data`;
+      console.log("Intentando leer el perfil en la ruta:", docPath);
       
       try {
           const profileSnap = await getDoc(doc(db, 'artifacts', projectId, 'users', user.uid, 'profile', 'data'));
           
           if (profileSnap.exists()) {
              const data = profileSnap.data();
+             console.log("Datos del perfil encontrados:", data);
              
              // Verificación más flexible: Acepta booleano true o string "true"
              if (data.isAdmin === true || String(data.isAdmin).toLowerCase() === "true") {
@@ -141,22 +143,28 @@ const AdminLogin = () => {
              } else {
                  await signOut(auth);
                  // Mostrar exactamente qué valor leyó la base de datos para depurar
-                 setError(`Acceso denegado. El campo isAdmin en Firebase tiene el valor: "${data.isAdmin}". Debe ser true.`);
+                 let errorMsg = `Acceso denegado. `;
+                 if (data.isAdmin === undefined) {
+                     errorMsg += `El campo 'isAdmin' NO EXISTE en tu documento. Asegúrate de agregarlo como booleano (true) en: ${docPath}`;
+                 } else {
+                     errorMsg += `El campo 'isAdmin' existe, pero su valor es: "${data.isAdmin}" (tipo: ${typeof data.isAdmin}). Debe ser true (Booleano).`;
+                 }
+                 setError(errorMsg);
              }
           } else {
              await signOut(auth);
              // Mostrar la ruta exacta donde se está buscando
-             setError(`Error: Documento de perfil no encontrado en la ruta: ${docPath}`);
+             setError(`Error: Documento de perfil no encontrado. Verifica que el documento exista exactamente en la ruta: ${docPath}`);
           }
       } catch (docError) {
-          // Si falla la lectura del documento (por reglas), intentamos navegar de todos modos
-          // Si el usuario no es admin, las consultas del dashboard fallarán y mostrarán el error allí
-          console.warn("No se pudo leer el perfil (posible error de reglas). Intentando acceder al dashboard...", docError);
-          navigate('/dashboard');
+          // Si falla la lectura del documento (por reglas u otro error)
+          console.error("Error al intentar leer el perfil:", docError);
+          await signOut(auth);
+          setError(`Error de Firestore al leer tu perfil: ${docError.message}. Verifica las reglas de seguridad o tu conexión.`);
       }
     } catch (err) {
-      console.error("Error de login:", err);
-      setError("Credenciales incorrectas o error de red.");
+      console.error("Error de login (Authentication):", err);
+      setError("Credenciales incorrectas o usuario no encontrado en Firebase Authentication.");
     } finally {
       setLoading(false);
     }
