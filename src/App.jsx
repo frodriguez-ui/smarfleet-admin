@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
   Shield, Users, Truck, Package, LogOut, 
-  Search, AlertTriangle, CheckCircle, XCircle, X
+  Search, AlertTriangle, CheckCircle, XCircle, X,
+  MapPin, Calendar, Link as LinkIcon, Trash2, Edit
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -10,7 +11,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { 
   getFirestore, collectionGroup, collection, query, onSnapshot, 
-  doc, getDoc, updateDoc
+  doc, getDoc, updateDoc, deleteDoc
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -28,7 +29,7 @@ const db = getFirestore(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
 
 // ============================================================================
-// --- COMPONENTE: MODAL DE EDICIÓN DE USUARIO ---
+// --- COMPONENTES MODULARES (MODALES) ---
 // ============================================================================
 const EditUserModal = ({ user, onClose }) => {
     const [formData, setFormData] = useState({ ...user });
@@ -173,9 +174,12 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [trips, setTrips] = useState([]);
   const [loads, setLoads] = useState([]);
+  const [connections, setConnections] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
 
+  // Escuchar colecciones principales de Firebase
   useEffect(() => {
+    // 1. Usuarios
     const qUsers = query(collectionGroup(db, 'profile'));
     const unsubUsers = onSnapshot(qUsers, 
         (snap) => {
@@ -187,13 +191,19 @@ const AdminDashboard = () => {
         (error) => console.error(error)
     );
 
+    // 2. Viajes (Transportistas)
     const qTrips = query(collection(db, 'artifacts', projectId, 'public', 'data', 'trips'));
-    const unsubTrips = onSnapshot(qTrips, s => setTrips(s.docs.map(d => ({id: d.id, ...d.data()}))));
+    const unsubTrips = onSnapshot(qTrips, s => setTrips(s.docs.map(d => ({id: d.id, type: 'trip', ...d.data()}))));
 
+    // 3. Cargas (Generadores)
     const qLoads = query(collection(db, 'artifacts', projectId, 'public', 'data', 'loads'));
-    const unsubLoads = onSnapshot(qLoads, s => setLoads(s.docs.map(d => ({id: d.id, ...d.data()}))));
+    const unsubLoads = onSnapshot(qLoads, s => setLoads(s.docs.map(d => ({id: d.id, type: 'load', ...d.data()}))));
 
-    return () => { unsubUsers(); unsubTrips(); unsubLoads(); };
+    // 4. Conexiones (Matches y Chats)
+    const qConns = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections'));
+    const unsubConns = onSnapshot(qConns, s => setConnections(s.docs.map(d => ({id: d.id, ...d.data()}))));
+
+    return () => { unsubUsers(); unsubTrips(); unsubLoads(); unsubConns(); };
   }, []);
 
   const handleLogout = async () => {
@@ -201,12 +211,27 @@ const AdminDashboard = () => {
     navigate('/');
   };
 
+  // Función para moderación (borrar publicaciones)
+  const handleDeletePublication = async (id, type) => {
+      if(!window.confirm("¿Seguro que deseas eliminar esta publicación permanentemente?")) return;
+      try {
+          const collectionName = type === 'trip' ? 'trips' : 'loads';
+          await deleteDoc(doc(db, 'artifacts', projectId, 'public', 'data', collectionName, id));
+      } catch (error) {
+          alert("Error al eliminar: " + error.message);
+      }
+  };
+
+  // Combinar cargas y viajes para la vista de Publicaciones
+  const allPublications = [...trips, ...loads].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
   return (
     <div className="min-h-screen bg-slate-50 flex text-left font-sans">
       {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />}
 
+      {/* --- MENÚ LATERAL --- */}
       <aside className="w-64 bg-slate-900 text-white fixed h-full flex flex-col p-6 z-20">
-        <div className="flex items-center gap-3 mb-12">
+        <div className="flex items-center gap-3 mb-10">
             <div className="p-2 bg-blue-600 rounded-lg"><Shield size={20}/></div>
             <span className="font-black text-xl tracking-tighter">SMAR<span className="text-blue-500">ADMIN</span></span>
         </div>
@@ -218,6 +243,12 @@ const AdminDashboard = () => {
             <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <Users size={18}/> Usuarios
             </button>
+            <button onClick={() => setActiveTab('publications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'publications' ? 'bg-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                <Package size={18}/> Publicaciones
+            </button>
+            <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                <LinkIcon size={18}/> Conexiones
+            </button>
         </nav>
 
         <button onClick={handleLogout} className="mt-auto flex items-center gap-3 text-slate-400 hover:text-white font-bold text-sm p-4 rounded-xl hover:bg-slate-800 transition-all">
@@ -225,22 +256,24 @@ const AdminDashboard = () => {
         </button>
       </aside>
 
+      {/* --- ÁREA DE CONTENIDO PRINCIPAL --- */}
       <main className="ml-64 flex-1 p-10 max-w-7xl">
         <header className="mb-10">
             <h2 className="text-3xl font-black text-slate-800">Panel de Control</h2>
             <p className="text-slate-500 font-medium mt-1">Monitoreo en tiempo real de la red Smarfleet</p>
         </header>
 
+        {/* MÓDULO: RESUMEN (OVERVIEW) */}
         {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                     <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4"><Users size={24}/></div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Usuarios Totales</p>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Usuarios Registrados</p>
                     <p className="text-4xl font-black text-slate-800 mt-1">{users.length}</p>
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Truck size={24}/></div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Viajes Activos</p>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Viajes Publicados</p>
                     <p className="text-4xl font-black text-slate-800 mt-1">{trips.length}</p>
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
@@ -248,11 +281,20 @@ const AdminDashboard = () => {
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Cargas Disponibles</p>
                     <p className="text-4xl font-black text-slate-800 mt-1">{loads.length}</p>
                 </div>
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                    <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4"><LinkIcon size={24}/></div>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Matches / Conexiones</p>
+                    <p className="text-4xl font-black text-slate-800 mt-1">{connections.length}</p>
+                </div>
             </div>
         )}
 
+        {/* MÓDULO: USUARIOS */}
         {activeTab === 'users' && (
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Directorio de Usuarios</h3>
+                </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-slate-50 border-b border-slate-100">
@@ -267,7 +309,10 @@ const AdminDashboard = () => {
                             {users.map(u => (
                                 <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                                     <td className="p-5">
-                                        <p className="font-bold text-slate-800">{u.businessName || 'Sin nombre'}</p>
+                                        <div className="flex items-center gap-2">
+                                            {u.isAdmin && <Shield size={14} className="text-blue-500" title="Administrador"/>}
+                                            <p className="font-bold text-slate-800">{u.businessName || 'Sin nombre'}</p>
+                                        </div>
                                         <p className="text-xs text-slate-500 font-medium">{u.email || u.id}</p>
                                     </td>
                                     <td className="p-5">
@@ -294,6 +339,100 @@ const AdminDashboard = () => {
                 </div>
             </div>
         )}
+
+        {/* MÓDULO: PUBLICACIONES (Mercado Global) */}
+        {activeTab === 'publications' && (
+             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                 <div className="p-5 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Todas las Publicaciones (Mercado)</h3>
+                 </div>
+                 <div className="overflow-x-auto">
+                     <table className="w-full text-left">
+                         <thead className="bg-slate-50 border-b border-slate-100">
+                             <tr>
+                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Tipo / Empresa</th>
+                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Ruta (Origen - Destino)</th>
+                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Fecha / Estatus</th>
+                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                             </tr>
+                         </thead>
+                         <tbody className="divide-y divide-slate-100">
+                             {allPublications.map(pub => (
+                                 <tr key={pub.id} className="hover:bg-slate-50/50 transition-colors">
+                                     <td className="p-5">
+                                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-1 ${pub.type === 'trip' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                             {pub.type === 'trip' ? 'Viaje' : 'Carga'}
+                                         </span>
+                                         <p className="font-bold text-slate-800 text-sm">{pub.company}</p>
+                                         <p className="text-xs text-slate-500 font-mono">ID: {pub.customId || pub.id.substring(0,6)}</p>
+                                     </td>
+                                     <td className="p-5">
+                                         <p className="font-bold text-slate-800 text-sm">{pub.originCity || pub.originState}</p>
+                                         <p className="text-xs text-slate-500">{pub.destinationCity || pub.destinationState}</p>
+                                     </td>
+                                     <td className="p-5">
+                                         <p className="font-bold text-slate-800 text-sm flex items-center gap-1"><Calendar size={12}/> {pub.date || 'Fija'}</p>
+                                         <span className={`text-[10px] font-bold ${pub.status === 'active' ? 'text-emerald-500' : pub.status === 'completed' ? 'text-blue-500' : 'text-amber-500'}`}>
+                                            {pub.status === 'active' ? 'ACTIVA' : pub.status.toUpperCase()}
+                                         </span>
+                                     </td>
+                                     <td className="p-5 text-right">
+                                         <button onClick={() => handleDeletePublication(pub.id, pub.type)} className="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 transition-colors" title="Borrar Publicación">
+                                             <Trash2 size={16}/>
+                                         </button>
+                                     </td>
+                                 </tr>
+                             ))}
+                         </tbody>
+                     </table>
+                 </div>
+             </div>
+        )}
+
+        {/* MÓDULO: CONEXIONES (Matches y Tracking) */}
+        {activeTab === 'connections' && (
+             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                 <div className="p-5 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Tracking de Conexiones (Matches)</h3>
+                 </div>
+                 <div className="overflow-x-auto">
+                     <table className="w-full text-left">
+                         <thead className="bg-slate-50 border-b border-slate-100">
+                             <tr>
+                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Participantes</th>
+                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Estatus de Solicitud</th>
+                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Estatus del Viaje</th>
+                             </tr>
+                         </thead>
+                         <tbody className="divide-y divide-slate-100">
+                             {connections.map(conn => (
+                                 <tr key={conn.id} className="hover:bg-slate-50/50 transition-colors">
+                                     <td className="p-5">
+                                         <p className="text-xs font-bold text-blue-600 mb-1">De: <span className="text-slate-800">{conn.fromName}</span></p>
+                                         <p className="text-xs font-bold text-emerald-600">Para: <span className="text-slate-800">{conn.toName}</span></p>
+                                     </td>
+                                     <td className="p-5">
+                                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${conn.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                             {conn.status === 'accepted' ? 'Aceptada' : 'Pendiente'}
+                                         </span>
+                                     </td>
+                                     <td className="p-5">
+                                         {conn.status === 'accepted' ? (
+                                             <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${conn.tripStatus === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-200' : conn.tripStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                                {conn.tripStatus ? conn.tripStatus.toUpperCase() : 'EN PROCESO'}
+                                             </span>
+                                         ) : (
+                                            <span className="text-xs text-slate-400">-</span>
+                                         )}
+                                     </td>
+                                 </tr>
+                             ))}
+                         </tbody>
+                     </table>
+                 </div>
+             </div>
+        )}
+
       </main>
     </div>
   );
