@@ -134,7 +134,6 @@ const EditUserModal = ({ user, onClose }) => {
 
 // 2. MODAL DE DETALLE (DRILL-DOWN)
 const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) => {
-    // Filtrar la información exclusiva de este usuario
     const userPubs = useMemo(() => {
         return [...allTrips, ...allLoads]
             .filter(p => p.userId === user.id)
@@ -300,21 +299,17 @@ const AdminLogin = () => {
       const user = userCredential.user;
       
       const docPath = `artifacts/${projectId}/users/${user.uid}/profile/data`;
-      console.log("Intentando leer el perfil en la ruta:", docPath);
       
       try {
           const profileSnap = await getDoc(doc(db, 'artifacts', projectId, 'users', user.uid, 'profile', 'data'));
           
           if (profileSnap.exists()) {
              const data = profileSnap.data();
-             console.log("Datos del perfil encontrados:", data);
              
-             // Verificación más flexible: Acepta booleano true o string "true"
              if (data.isAdmin === true || String(data.isAdmin).toLowerCase() === "true") {
                  navigate('/dashboard');
              } else {
                  await signOut(auth);
-                 // Mostrar exactamente qué valor leyó la base de datos para depurar
                  let errorMsg = `Acceso denegado. `;
                  if (data.isAdmin === undefined) {
                      errorMsg += `El campo 'isAdmin' NO EXISTE en tu documento. Asegúrate de agregarlo como booleano (true) en: ${docPath}`;
@@ -325,11 +320,9 @@ const AdminLogin = () => {
              }
           } else {
              await signOut(auth);
-             // Mostrar la ruta exacta donde se está buscando
              setError(`Error: Documento de perfil no encontrado. Verifica que el documento exista exactamente en la ruta: ${docPath}`);
           }
       } catch (docError) {
-          // Si falla la lectura del documento (por reglas u otro error)
           console.error("Error al intentar leer el perfil:", docError);
           await signOut(auth);
           setError(`Error de Firestore al leer tu perfil: ${docError.message}. Verifica las reglas de seguridad o tu conexión.`);
@@ -392,6 +385,9 @@ const AdminDashboard = () => {
   const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all', status: 'all' });
   const [pubsFilter, setPubsFilter] = useState({ search: '', type: 'all', status: 'all' });
   const [connsFilter, setConnsFilter] = useState({ search: '', status: 'all' });
+  
+  // Estado para Gráficas Analíticas
+  const [trendMonthsRange, setTrendMonthsRange] = useState(6);
 
   // Escuchar colecciones principales de Firebase
   useEffect(() => {
@@ -403,7 +399,7 @@ const AdminDashboard = () => {
                 .map(d => ({ id: d.ref.parent.parent.id, refPath: d.ref.path, ...d.data() }))
                 .filter(u => u.refPath.includes(projectId));
             setUsers(all);
-            setDbError(null); // Limpiamos errores si tiene éxito
+            setDbError(null); 
         },
         (error) => {
             console.error("Error al cargar usuarios:", error);
@@ -443,7 +439,6 @@ const AdminDashboard = () => {
     navigate('/');
   };
 
-  // Función para moderación (borrar publicaciones)
   const handleDeletePublication = async (id, type) => {
       if(!window.confirm("¿Seguro que deseas eliminar esta publicación permanentemente?")) return;
       try {
@@ -454,17 +449,15 @@ const AdminDashboard = () => {
       }
   };
 
-  // 🔥 FUNCIÓN PARA DIFUSIÓN GLOBAL (BROADCAST) 🔥
   const handleSendGlobalNotification = async (e) => {
       e.preventDefault();
       if (!notifForm.title || !notifForm.message) return;
       
-      const validUsers = users.filter(u => !u.isSuspended); // Opcional: solo enviar a activos
+      const validUsers = users.filter(u => !u.isSuspended);
       if (!window.confirm(`Estás a punto de enviar una alerta oficial a ${validUsers.length} usuarios activos. ¿Deseas continuar?`)) return;
 
       setSendingNotif(true);
       try {
-          // Firebase permite hasta 500 escrituras por Batch. Dividiremos en fragmentos de 450 por seguridad.
           const batches = [];
           let currentBatch = writeBatch(db);
           let opCount = 0;
@@ -473,9 +466,9 @@ const AdminDashboard = () => {
               const notifRef = doc(collection(db, 'artifacts', projectId, 'public', 'data', 'notifications'));
               currentBatch.set(notifRef, {
                   toUserId: u.id,
-                  fromUserId: 'ADMIN_SYSTEM', // Marca especial para alertas de administrador
+                  fromUserId: 'ADMIN_SYSTEM',
                   type: 'global_alert',
-                  alertType: notifForm.type, // 'info', 'warning', 'success'
+                  alertType: notifForm.type,
                   title: notifForm.title,
                   message: notifForm.message,
                   unread: true,
@@ -490,9 +483,7 @@ const AdminDashboard = () => {
               }
           });
 
-          if (opCount > 0) {
-              batches.push(currentBatch.commit());
-          }
+          if (opCount > 0) batches.push(currentBatch.commit());
 
           await Promise.all(batches);
           alert(`¡Éxito! Notificación enviada a ${validUsers.length} usuarios de forma segura.`);
@@ -522,7 +513,6 @@ const AdminDashboard = () => {
           const matchesRole = usersFilter.role === 'all' || u.role === usersFilter.role;
           const matchesTier = usersFilter.tier === 'all' || u.tier === usersFilter.tier;
           
-          // Filtro por estado (Activo/Suspendido)
           const isSuspended = u.isSuspended === true;
           const matchesStatus = usersFilter.status === 'all' 
               || (usersFilter.status === 'active' && !isSuspended) 
@@ -556,14 +546,14 @@ const AdminDashboard = () => {
               c.toName?.toLowerCase().includes(searchLower) ||
               c.id.toLowerCase().includes(searchLower);
           
-          const targetStatus = c.tripStatus || c.status; // Usamos tripStatus si existe, sino el status base
+          const targetStatus = c.tripStatus || c.status;
           const matchesStatus = connsFilter.status === 'all' || targetStatus === connsFilter.status;
 
           return matchesSearch && matchesStatus;
       });
   }, [connections, connsFilter]);
 
-  // --- CÁLCULOS DE ESTADÍSTICAS Y GRÁFICAS ---
+  // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS (MÓDULO ROBUSTO) ---
   const stats = useMemo(() => {
       const carriers = users.filter(u => u.role === 'carrier').length;
       const shippers = users.filter(u => u.role === 'shipper').length;
@@ -573,26 +563,68 @@ const AdminDashboard = () => {
       const completedPubs = allPublications.filter(p => p.status === 'completed').length;
       const pausedPubs = allPublications.filter(p => p.status === 'paused').length;
 
-      // Cálculo de Impacto Ambiental (Aproximación basada en matches completados)
+      // KPI Sostenibilidad
       const completedMatches = connections.filter(c => c.tripStatus === 'completed');
-      
-      // Asumimos un promedio de 450 km por viaje vacío evitado
       const kmSavedPerMatch = 450; 
-      // Emisión promedio de un tractocamión diesel: ~1.05 kg de CO2 por kilómetro
       const co2KgPerKm = 1.05; 
-
       const totalKmSaved = completedMatches.length * kmSavedPerMatch;
-      const totalCo2SavedKg = totalKmSaved * co2KgPerKm;
-      const totalCo2SavedTons = (totalCo2SavedKg / 1000).toFixed(1); // Convertir a Toneladas
+      const totalCo2SavedTons = ((totalKmSaved * co2KgPerKm) / 1000).toFixed(1);
+
+      // --- CÁLCULO DE GRÁFICAS POR MES (TENDENCIAS) ---
+      const monthsArray = Array.from({length: trendMonthsRange}, (_, i) => {
+          const d = new Date();
+          d.setMonth(d.getMonth() - i);
+          return { 
+              month: d.getMonth(), 
+              year: d.getFullYear(), 
+              label: d.toLocaleString('es-MX', {month: 'short'}).toUpperCase() + ' ' + d.getFullYear().toString().slice(2)
+          };
+      }).reverse();
+
+      // Función auxiliar para extraer fecha segura
+      const getSafeDate = (item) => {
+          if (item.createdAt?.seconds) return new Date(item.createdAt.seconds * 1000);
+          return new Date(); // Fallback temporal para datos legacy sin fecha
+      };
+
+      let maxUsersCategory = 1;
+      let maxPubsCategory = 1;
+
+      const trendsData = monthsArray.map(m => {
+          // Filtrar Usuarios de este mes
+          const mUsers = users.filter(u => {
+              const d = getSafeDate(u);
+              return d.getMonth() === m.month && d.getFullYear() === m.year;
+          });
+          const newCarriers = mUsers.filter(u => u.role === 'carrier').length;
+          const newShippers = mUsers.filter(u => u.role === 'shipper').length;
+          if (newCarriers > maxUsersCategory) maxUsersCategory = newCarriers;
+          if (newShippers > maxUsersCategory) maxUsersCategory = newShippers;
+
+          // Filtrar Publicaciones de este mes
+          const mPubs = allPublications.filter(p => {
+              const d = getSafeDate(p);
+              return d.getMonth() === m.month && d.getFullYear() === m.year;
+          });
+          const newTrips = mPubs.filter(p => p.type === 'trip').length;
+          const newLoads = mPubs.filter(p => p.type === 'load').length;
+          if (newTrips > maxPubsCategory) maxPubsCategory = newTrips;
+          if (newLoads > maxPubsCategory) maxPubsCategory = newLoads;
+
+          return { 
+              ...m, 
+              newCarriers, newShippers, totalNewUsers: newCarriers + newShippers,
+              newTrips, newLoads, totalNewPubs: newTrips + newLoads
+          };
+      });
 
       return {
           carriers, shippers, suspended,
           activePubs, completedPubs, pausedPubs,
-          totalKmSaved,
-          totalCo2SavedTons,
-          completedMatchesCount: completedMatches.length
+          totalKmSaved, totalCo2SavedTons, completedMatchesCount: completedMatches.length,
+          trendsData, maxUsersCategory, maxPubsCategory
       };
-  }, [users, allPublications, connections]);
+  }, [users, allPublications, connections, trendMonthsRange]);
 
 
   return (
@@ -641,7 +673,7 @@ const AdminDashboard = () => {
       <main className="ml-64 flex-1 p-10 max-w-7xl">
         <header className="mb-10">
             <h2 className="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h2>
-            <p className="text-slate-500 font-medium mt-1">Monitoreo en tiempo real de la red Smarfleet</p>
+            <p className="text-slate-500 font-medium mt-1">Monitoreo y métricas en tiempo real de la red Smarfleet</p>
         </header>
 
         {/* ALERTA DE ERROR DE BASE DE DATOS */}
@@ -667,13 +699,13 @@ const AdminDashboard = () => {
         {activeTab === 'overview' && (
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                 
-                {/* 1. Tarjetas Superiores (Totales) */}
+                {/* 1. Tarjetas Superiores (Totales Históricos) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                         <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4"><Users size={24}/></div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Usuarios Registrados</p>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Total Usuarios</p>
                         <p className="text-4xl font-black text-slate-800 mt-1">{users.length}</p>
-                        {stats.suspended > 0 && <p className="text-xs font-bold text-rose-500 mt-2 flex items-center gap-1"><Ban size={12}/> {stats.suspended} Suspendidos</p>}
+                        {stats.suspended > 0 && <p className="text-[10px] font-bold text-rose-500 mt-2 flex items-center gap-1 bg-rose-50 w-fit px-2 py-1 rounded"><Ban size={10}/> {stats.suspended} Suspendidos</p>}
                     </div>
                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                         <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Truck size={24}/></div>
@@ -687,96 +719,149 @@ const AdminDashboard = () => {
                     </div>
                     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                         <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4"><LinkIcon size={24}/></div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Matches en Curso</p>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Interacciones</p>
                         <p className="text-4xl font-black text-slate-800 mt-1">{connections.length}</p>
                     </div>
                 </div>
 
-                {/* 2. Sección de Impacto Ambiental e Indicadores Críticos */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Tarjeta Impacto Ambiental */}
-                    <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-8 rounded-3xl shadow-lg shadow-emerald-600/20 text-white relative overflow-hidden">
-                        <Leaf size={140} className="absolute -bottom-6 -right-6 opacity-10 pointer-events-none transform rotate-12"/>
-                        <h3 className="text-sm font-black text-emerald-100 uppercase tracking-widest mb-6 flex items-center gap-2">
-                            <Activity size={18}/> Impacto Ambiental (Smarfleet)
+                {/* 2. Sección de Impacto Ambiental */}
+                <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-8 rounded-3xl shadow-lg shadow-emerald-600/20 text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
+                    <Leaf size={200} className="absolute -bottom-10 -right-10 opacity-10 pointer-events-none transform rotate-12"/>
+                    <div className="relative z-10 w-full md:w-1/3">
+                        <h3 className="text-sm font-black text-emerald-100 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <Activity size={18}/> Impacto Real Sostenible
                         </h3>
-                        <div className="grid grid-cols-2 gap-6 relative z-10">
-                            <div>
-                                <p className="text-5xl font-black">{stats.totalKmSaved.toLocaleString()}</p>
-                                <p className="text-sm font-medium text-emerald-100 mt-2">Kilómetros Vacíos Optimizados</p>
-                            </div>
-                            <div>
-                                <p className="text-5xl font-black">{stats.totalCo2SavedTons}</p>
-                                <p className="text-sm font-medium text-emerald-100 mt-2">Toneladas de CO₂ Evitadas</p>
-                            </div>
+                        <p className="text-sm text-emerald-50 font-medium leading-relaxed">
+                            Al conectar transportistas vacíos con cargas compatibles, Smarfleet reduce la emisión de gases de efecto invernadero en el sector logístico de México.
+                        </p>
+                        <span className="inline-block mt-4 text-[10px] font-bold text-emerald-200 bg-emerald-800/50 px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                            Basado en {stats.completedMatchesCount} viajes completados.
+                        </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-6 relative z-10 w-full md:w-2/3 border-t md:border-t-0 md:border-l border-emerald-500/30 pt-6 md:pt-0 md:pl-8">
+                        <div>
+                            <p className="text-5xl lg:text-6xl font-black tracking-tighter">{stats.totalKmSaved.toLocaleString()}</p>
+                            <p className="text-sm font-bold text-emerald-200 mt-2 uppercase tracking-wide">Km. Vacíos Evitados</p>
                         </div>
-                        <div className="mt-6 pt-4 border-t border-emerald-500/50 flex justify-between items-center">
-                            <span className="text-xs font-bold text-emerald-100">Cálculo basado en {stats.completedMatchesCount} viajes completados.</span>
-                            <div className="w-2 h-2 bg-emerald-300 rounded-full animate-ping"></div>
+                        <div>
+                            <p className="text-5xl lg:text-6xl font-black tracking-tighter">{stats.totalCo2SavedTons}</p>
+                            <p className="text-sm font-bold text-emerald-200 mt-2 uppercase tracking-wide">Toneladas CO₂ Mitigadas</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. PANEL DE GRÁFICAS DE TENDENCIAS (NUEVO) */}
+                <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
+                    {/* Controles del Dashboard */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10 relative z-10">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                <TrendingUp className="text-blue-600"/> Rendimiento y Tracción de Plataforma
+                            </h3>
+                            <p className="text-xs text-slate-500 font-medium mt-1">Análisis de crecimiento de cuentas y volumen de publicaciones.</p>
+                        </div>
+                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                            <button onClick={() => setTrendMonthsRange(3)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${trendMonthsRange === 3 ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>3 Meses</button>
+                            <button onClick={() => setTrendMonthsRange(6)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${trendMonthsRange === 6 ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>6 Meses</button>
+                            <button onClick={() => setTrendMonthsRange(12)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${trendMonthsRange === 12 ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>1 Año</button>
                         </div>
                     </div>
 
-                    {/* Gráficas Visuales (Puras CSS/Tailwind) */}
-                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    <div className="grid lg:grid-cols-2 gap-12 relative z-10">
                         
-                        {/* Gráfica 1: Distribución de Usuarios */}
-                        <div>
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                                <Users size={14}/> Distribución de Perfiles
-                            </h3>
-                            <div className="flex h-32 items-end gap-4">
-                                {/* Barra Transportistas */}
-                                <div className="flex-1 flex flex-col justify-end items-center group relative">
-                                    <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">{stats.carriers}</div>
-                                    <div className="w-full bg-indigo-500 rounded-t-xl transition-all duration-1000 ease-out" 
-                                         style={{ height: `${users.length > 0 ? (stats.carriers / users.length) * 100 : 0}%`, minHeight: '10%' }}></div>
-                                    <span className="text-[10px] font-bold text-slate-500 mt-2">Transportistas</span>
+                        {/* Gráfica A: Crecimiento de Usuarios */}
+                        <div className="space-y-6">
+                            <div className="flex justify-between items-end">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Users size={14}/> Nuevas Cuentas (Mensual)</h4>
+                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600">
+                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-indigo-500"></div> Transportistas</span>
+                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></div> Generadores</span>
                                 </div>
-                                {/* Barra Generadores */}
-                                <div className="flex-1 flex flex-col justify-end items-center group relative">
-                                    <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">{stats.shippers}</div>
-                                    <div className="w-full bg-emerald-500 rounded-t-xl transition-all duration-1000 ease-out" 
-                                         style={{ height: `${users.length > 0 ? (stats.shippers / users.length) * 100 : 0}%`, minHeight: '10%' }}></div>
-                                    <span className="text-[10px] font-bold text-slate-500 mt-2">Generadores</span>
+                            </div>
+                            
+                            <div className="h-56 w-full flex items-end gap-2 md:gap-4 relative">
+                                {/* Líneas de fondo (Eje Y) */}
+                                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
+                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{stats.maxUsersCategory}</span></div>
+                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{Math.round(stats.maxUsersCategory/2)}</span></div>
+                                    <div className="border-b border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">0</span></div>
+                                </div>
+
+                                {/* Barras Dinámicas */}
+                                <div className="absolute inset-0 flex items-end gap-2 md:gap-4 ml-2 pb-8">
+                                    {stats.trendsData.map((data, idx) => (
+                                        <div key={idx} className="flex-1 flex items-end justify-center gap-1 h-full relative group">
+                                            
+                                            {/* Tooltip Hover */}
+                                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-xl">
+                                                {data.label}: {data.totalNewUsers} Usuarios
+                                                <div className="text-[9px] font-normal text-slate-300 mt-1">{data.newCarriers} Transp. / {data.newShippers} Generadores</div>
+                                            </div>
+
+                                            {/* Barra Transp */}
+                                            <div 
+                                                className="w-1/2 bg-indigo-500 rounded-t-md hover:bg-indigo-400 transition-all duration-500" 
+                                                style={{ height: `${(data.newCarriers / stats.maxUsersCategory) * 100}%`, minHeight: data.newCarriers > 0 ? '4px' : '0' }}>
+                                            </div>
+                                            {/* Barra Generador */}
+                                            <div 
+                                                className="w-1/2 bg-emerald-500 rounded-t-md hover:bg-emerald-400 transition-all duration-500" 
+                                                style={{ height: `${(data.newShippers / stats.maxUsersCategory) * 100}%`, minHeight: data.newShippers > 0 ? '4px' : '0' }}>
+                                            </div>
+
+                                            {/* Etiqueta Eje X */}
+                                            <span className="absolute -bottom-6 text-[9px] font-black text-slate-500 tracking-wider w-full text-center truncate">{data.label}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Gráfica 2: Estado de Publicaciones */}
-                        <div>
-                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                                <TrendingUp size={14}/> Actividad del Mercado
-                            </h3>
-                            <div className="space-y-4">
-                                {/* Barra Activas */}
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-[10px] font-bold">
-                                        <span className="text-slate-600">Activas ({stats.activePubs})</span>
-                                        <span className="text-blue-600">{allPublications.length > 0 ? Math.round((stats.activePubs / allPublications.length) * 100) : 0}%</span>
-                                    </div>
-                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${allPublications.length > 0 ? (stats.activePubs / allPublications.length) * 100 : 0}%` }}></div>
-                                    </div>
+                        {/* Gráfica B: Crecimiento de Publicaciones */}
+                        <div className="space-y-6">
+                            <div className="flex justify-between items-end">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Package size={14}/> Nuevo Inventario (Mensual)</h4>
+                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600">
+                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-500"></div> Viajes</span>
+                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-500"></div> Cargas</span>
                                 </div>
-                                {/* Barra Completadas */}
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-[10px] font-bold">
-                                        <span className="text-slate-600">Completadas ({stats.completedPubs})</span>
-                                        <span className="text-emerald-600">{allPublications.length > 0 ? Math.round((stats.completedPubs / allPublications.length) * 100) : 0}%</span>
-                                    </div>
-                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${allPublications.length > 0 ? (stats.completedPubs / allPublications.length) * 100 : 0}%` }}></div>
-                                    </div>
+                            </div>
+                            
+                            <div className="h-56 w-full flex items-end gap-2 md:gap-4 relative">
+                                {/* Líneas de fondo (Eje Y) */}
+                                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
+                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{stats.maxPubsCategory}</span></div>
+                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{Math.round(stats.maxPubsCategory/2)}</span></div>
+                                    <div className="border-b border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">0</span></div>
                                 </div>
-                                {/* Barra Pausadas */}
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between text-[10px] font-bold">
-                                        <span className="text-slate-600">Pausadas ({stats.pausedPubs})</span>
-                                        <span className="text-amber-500">{allPublications.length > 0 ? Math.round((stats.pausedPubs / allPublications.length) * 100) : 0}%</span>
-                                    </div>
-                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-amber-400 rounded-full" style={{ width: `${allPublications.length > 0 ? (stats.pausedPubs / allPublications.length) * 100 : 0}%` }}></div>
-                                    </div>
+
+                                {/* Barras Dinámicas */}
+                                <div className="absolute inset-0 flex items-end gap-2 md:gap-4 ml-2 pb-8">
+                                    {stats.trendsData.map((data, idx) => (
+                                        <div key={idx} className="flex-1 flex items-end justify-center gap-1 h-full relative group">
+                                            
+                                            {/* Tooltip Hover */}
+                                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-xl">
+                                                {data.label}: {data.totalNewPubs} Publicaciones
+                                                <div className="text-[9px] font-normal text-slate-300 mt-1">{data.newTrips} Viajes / {data.newLoads} Cargas</div>
+                                            </div>
+
+                                            {/* Barra Viajes */}
+                                            <div 
+                                                className="w-1/2 bg-blue-500 rounded-t-md hover:bg-blue-400 transition-all duration-500" 
+                                                style={{ height: `${(data.newTrips / stats.maxPubsCategory) * 100}%`, minHeight: data.newTrips > 0 ? '4px' : '0' }}>
+                                            </div>
+                                            {/* Barra Cargas */}
+                                            <div 
+                                                className="w-1/2 bg-amber-500 rounded-t-md hover:bg-amber-400 transition-all duration-500" 
+                                                style={{ height: `${(data.newLoads / stats.maxPubsCategory) * 100}%`, minHeight: data.newLoads > 0 ? '4px' : '0' }}>
+                                            </div>
+
+                                            {/* Etiqueta Eje X */}
+                                            <span className="absolute -bottom-6 text-[9px] font-black text-slate-500 tracking-wider w-full text-center truncate">{data.label}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
