@@ -128,26 +128,34 @@ const AdminLogin = () => {
       const user = userCredential.user;
       
       const docPath = `artifacts/${projectId}/users/${user.uid}/profile/data`;
-      const profileSnap = await getDoc(doc(db, 'artifacts', projectId, 'users', user.uid, 'profile', 'data'));
       
-      if (profileSnap.exists()) {
-         const data = profileSnap.data();
-         
-         // Verificación más flexible: Acepta booleano true o string "true"
-         if (data.isAdmin === true || String(data.isAdmin).toLowerCase() === "true") {
-             navigate('/dashboard');
-         } else {
+      try {
+          const profileSnap = await getDoc(doc(db, 'artifacts', projectId, 'users', user.uid, 'profile', 'data'));
+          
+          if (profileSnap.exists()) {
+             const data = profileSnap.data();
+             
+             // Verificación más flexible: Acepta booleano true o string "true"
+             if (data.isAdmin === true || String(data.isAdmin).toLowerCase() === "true") {
+                 navigate('/dashboard');
+             } else {
+                 await signOut(auth);
+                 // Mostrar exactamente qué valor leyó la base de datos para depurar
+                 setError(`Acceso denegado. El campo isAdmin en Firebase tiene el valor: "${data.isAdmin}". Debe ser true.`);
+             }
+          } else {
              await signOut(auth);
-             // Mostrar exactamente qué valor leyó la base de datos para depurar
-             setError(`Acceso denegado. El campo isAdmin en Firebase tiene el valor: "${data.isAdmin}". Debe ser true.`);
-         }
-      } else {
-         await signOut(auth);
-         // Mostrar la ruta exacta donde se está buscando
-         setError(`Error: Documento de perfil no encontrado en la ruta: ${docPath}`);
+             // Mostrar la ruta exacta donde se está buscando
+             setError(`Error: Documento de perfil no encontrado en la ruta: ${docPath}`);
+          }
+      } catch (docError) {
+          // Si falla la lectura del documento (por reglas), intentamos navegar de todos modos
+          // Si el usuario no es admin, las consultas del dashboard fallarán y mostrarán el error allí
+          console.warn("No se pudo leer el perfil (posible error de reglas). Intentando acceder al dashboard...", docError);
+          navigate('/dashboard');
       }
     } catch (err) {
-      console.error(err);
+      console.error("Error de login:", err);
       setError("Credenciales incorrectas o error de red.");
     } finally {
       setLoading(false);
@@ -210,7 +218,7 @@ const AdminDashboard = () => {
             if (error.code === 'failed-precondition' || error.message.includes('index')) {
                 setDbError("Falta crear el índice en Firebase. Por favor, abre la consola del navegador (F12) y haz clic en el enlace azul que Firebase generó para crearlo.");
             } else if (error.code === 'permission-denied') {
-                setDbError("Permiso denegado. Las reglas de Firebase están bloqueando el acceso o tu usuario no es administrador.");
+                setDbError(`Permiso denegado. Tus reglas de Firebase están bloqueando la consulta global de perfiles. Verifica la Regla 5 en Firestore (collectionGroup). UID actual: ${auth.currentUser?.uid}`);
             } else {
                 setDbError(error.message);
             }
@@ -219,15 +227,21 @@ const AdminDashboard = () => {
 
     // 2. Viajes (Transportistas)
     const qTrips = query(collection(db, 'artifacts', projectId, 'public', 'data', 'trips'));
-    const unsubTrips = onSnapshot(qTrips, s => setTrips(s.docs.map(d => ({id: d.id, type: 'trip', ...d.data()}))));
+    const unsubTrips = onSnapshot(qTrips, s => setTrips(s.docs.map(d => ({id: d.id, type: 'trip', ...d.data()}))), 
+        (error) => { if (error.code === 'permission-denied') setDbError("Permiso denegado al leer Viajes. Revisa las reglas de Firestore."); }
+    );
 
     // 3. Cargas (Generadores)
     const qLoads = query(collection(db, 'artifacts', projectId, 'public', 'data', 'loads'));
-    const unsubLoads = onSnapshot(qLoads, s => setLoads(s.docs.map(d => ({id: d.id, type: 'load', ...d.data()}))));
+    const unsubLoads = onSnapshot(qLoads, s => setLoads(s.docs.map(d => ({id: d.id, type: 'load', ...d.data()}))),
+        (error) => { if (error.code === 'permission-denied') setDbError("Permiso denegado al leer Cargas. Revisa las reglas de Firestore."); }
+    );
 
     // 4. Conexiones (Matches y Chats)
     const qConns = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections'));
-    const unsubConns = onSnapshot(qConns, s => setConnections(s.docs.map(d => ({id: d.id, ...d.data()}))));
+    const unsubConns = onSnapshot(qConns, s => setConnections(s.docs.map(d => ({id: d.id, ...d.data()}))),
+        (error) => { if (error.code === 'permission-denied') setDbError("Permiso denegado al leer Conexiones. Revisa las reglas de Firestore."); }
+    );
 
     return () => { unsubUsers(); unsubTrips(); unsubLoads(); unsubConns(); };
   }, []);
@@ -293,9 +307,20 @@ const AdminDashboard = () => {
         {dbError && (
             <div className="mb-8 bg-rose-50 border-l-4 border-rose-500 p-6 rounded-r-2xl text-rose-700 shadow-sm animate-in fade-in">
                 <h4 className="font-black text-lg mb-2 flex items-center gap-2">
-                    <AlertTriangle /> Error de Acceso a Firebase
+                    <AlertTriangle /> Problema de Permisos en Firebase
                 </h4>
-                <p className="font-medium text-sm leading-relaxed">{dbError}</p>
+                <p className="font-medium text-sm leading-relaxed mt-2">{dbError}</p>
+                <div className="mt-4 p-4 bg-white/50 rounded-xl text-xs font-mono text-rose-800 border border-rose-200">
+                    Sugerencia: Revisa la Regla 5 en Firestore (collectionGroup). Debe ser algo como:<br/>
+                    <br/>
+                    <code>
+                        match /{`{path=**}`}/profile/data {'{'}<br/>
+                        &nbsp;&nbsp;allow read: if request.auth != null;<br/>
+                        {'}'}
+                    </code>
+                    <br/><br/>
+                    Por ahora, para asegurar que funcione, puedes poner `allow read: if request.auth != null;` en la regla global de perfiles.
+                </div>
             </div>
         )}
 
@@ -377,7 +402,7 @@ const AdminDashboard = () => {
         )}
 
         {/* MÓDULO: PUBLICACIONES (Mercado Global) */}
-        {activeTab === 'publications' && (
+        {activeTab === 'publications' && !dbError && (
              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                  <div className="p-5 border-b border-slate-100 bg-slate-50">
                     <h3 className="font-bold text-slate-800">Todas las Publicaciones (Mercado)</h3>
@@ -426,7 +451,7 @@ const AdminDashboard = () => {
         )}
 
         {/* MÓDULO: CONEXIONES (Matches y Tracking) */}
-        {activeTab === 'connections' && (
+        {activeTab === 'connections' && !dbError && (
              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                  <div className="p-5 border-b border-slate-100 bg-slate-50">
                     <h3 className="font-bold text-slate-800">Tracking de Conexiones (Matches)</h3>
