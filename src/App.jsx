@@ -4,7 +4,7 @@ import {
   Shield, Users, Truck, Package, LogOut, 
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
-  Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail
+  Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
