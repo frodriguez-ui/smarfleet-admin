@@ -176,10 +176,13 @@ const AdminDashboard = () => {
   const [loads, setLoads] = useState([]);
   const [connections, setConnections] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
+  
+  // Nuevo estado para capturar errores de índices o permisos
+  const [dbError, setDbError] = useState(null);
 
   // Escuchar colecciones principales de Firebase
   useEffect(() => {
-    // 1. Usuarios
+    // 1. Usuarios (Collection Group Query)
     const qUsers = query(collectionGroup(db, 'profile'));
     const unsubUsers = onSnapshot(qUsers, 
         (snap) => {
@@ -187,8 +190,18 @@ const AdminDashboard = () => {
                 .map(d => ({ id: d.ref.parent.parent.id, refPath: d.ref.path, ...d.data() }))
                 .filter(u => u.refPath.includes(projectId));
             setUsers(all);
+            setDbError(null); // Limpiamos errores si tiene éxito
         },
-        (error) => console.error(error)
+        (error) => {
+            console.error("Error al cargar usuarios:", error);
+            if (error.code === 'failed-precondition' || error.message.includes('index')) {
+                setDbError("Falta crear el índice en Firebase. Por favor, abre la consola del navegador (F12) y haz clic en el enlace azul que Firebase generó para crearlo.");
+            } else if (error.code === 'permission-denied') {
+                setDbError("Permiso denegado. Las reglas de Firebase están bloqueando el acceso o tu usuario no es administrador.");
+            } else {
+                setDbError(error.message);
+            }
+        }
     );
 
     // 2. Viajes (Transportistas)
@@ -263,6 +276,16 @@ const AdminDashboard = () => {
             <p className="text-slate-500 font-medium mt-1">Monitoreo en tiempo real de la red Smarfleet</p>
         </header>
 
+        {/* ALERTA DE ERROR DE BASE DE DATOS */}
+        {dbError && (
+            <div className="mb-8 bg-rose-50 border-l-4 border-rose-500 p-6 rounded-r-2xl text-rose-700 shadow-sm animate-in fade-in">
+                <h4 className="font-black text-lg mb-2 flex items-center gap-2">
+                    <AlertTriangle /> Error de Acceso a Firebase
+                </h4>
+                <p className="font-medium text-sm leading-relaxed">{dbError}</p>
+            </div>
+        )}
+
         {/* MÓDULO: RESUMEN (OVERVIEW) */}
         {activeTab === 'overview' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -290,7 +313,7 @@ const AdminDashboard = () => {
         )}
 
         {/* MÓDULO: USUARIOS */}
-        {activeTab === 'users' && (
+        {activeTab === 'users' && !dbError && (
             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                     <h3 className="font-bold text-slate-800">Directorio de Usuarios</h3>
