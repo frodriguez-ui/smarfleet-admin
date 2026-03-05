@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
   Shield, Users, Truck, Package, LogOut, 
   Search, AlertTriangle, CheckCircle, XCircle, X,
-  MapPin, Calendar, Link as LinkIcon, Trash2, Edit
+  MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -209,6 +209,11 @@ const AdminDashboard = () => {
   // Nuevo estado para capturar errores de índices o permisos
   const [dbError, setDbError] = useState(null);
 
+  // --- ESTADOS PARA FILTROS ---
+  const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all' });
+  const [pubsFilter, setPubsFilter] = useState({ search: '', type: 'all', status: 'all' });
+  const [connsFilter, setConnsFilter] = useState({ search: '', status: 'all' });
+
   // Escuchar colecciones principales de Firebase
   useEffect(() => {
     // 1. Usuarios (Collection Group Query)
@@ -270,36 +275,85 @@ const AdminDashboard = () => {
       }
   };
 
-  // Combinar cargas y viajes para la vista de Publicaciones
-  const allPublications = [...trips, ...loads].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  // --- LÓGICA DE FILTRADO ---
+  const allPublications = useMemo(() => {
+      return [...trips, ...loads].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  }, [trips, loads]);
+
+  const filteredUsers = useMemo(() => {
+      return users.filter(u => {
+          const searchLower = usersFilter.search.toLowerCase();
+          const matchesSearch = !usersFilter.search || 
+              u.businessName?.toLowerCase().includes(searchLower) || 
+              u.email?.toLowerCase().includes(searchLower) || 
+              u.id.toLowerCase().includes(searchLower);
+          
+          const matchesRole = usersFilter.role === 'all' || u.role === usersFilter.role;
+          const matchesTier = usersFilter.tier === 'all' || u.tier === usersFilter.tier;
+
+          return matchesSearch && matchesRole && matchesTier;
+      });
+  }, [users, usersFilter]);
+
+  const filteredPubs = useMemo(() => {
+      return allPublications.filter(p => {
+          const searchLower = pubsFilter.search.toLowerCase();
+          const matchesSearch = !pubsFilter.search || 
+              p.company?.toLowerCase().includes(searchLower) || 
+              p.customId?.toLowerCase().includes(searchLower) ||
+              p.originCity?.toLowerCase().includes(searchLower) ||
+              p.destinationCity?.toLowerCase().includes(searchLower);
+          
+          const matchesType = pubsFilter.type === 'all' || p.type === pubsFilter.type;
+          const matchesStatus = pubsFilter.status === 'all' || p.status === pubsFilter.status;
+
+          return matchesSearch && matchesType && matchesStatus;
+      });
+  }, [allPublications, pubsFilter]);
+
+  const filteredConns = useMemo(() => {
+      return connections.filter(c => {
+          const searchLower = connsFilter.search.toLowerCase();
+          const matchesSearch = !connsFilter.search || 
+              c.fromName?.toLowerCase().includes(searchLower) || 
+              c.toName?.toLowerCase().includes(searchLower) ||
+              c.id.toLowerCase().includes(searchLower);
+          
+          const targetStatus = c.tripStatus || c.status; // Usamos tripStatus si existe, sino el status base
+          const matchesStatus = connsFilter.status === 'all' || targetStatus === connsFilter.status;
+
+          return matchesSearch && matchesStatus;
+      });
+  }, [connections, connsFilter]);
+
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-left font-sans">
       {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />}
 
       {/* --- MENÚ LATERAL --- */}
-      <aside className="w-64 bg-slate-900 text-white fixed h-full flex flex-col p-6 z-20">
+      <aside className="w-64 bg-slate-900 text-white fixed h-full flex flex-col p-6 z-20 shadow-2xl">
         <div className="flex items-center gap-3 mb-10">
             <div className="p-2 bg-blue-600 rounded-lg"><Shield size={20}/></div>
             <span className="font-black text-xl tracking-tighter">SMAR<span className="text-blue-500">ADMIN</span></span>
         </div>
         
         <nav className="flex-1 space-y-2">
-            <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <Search size={18}/> Resumen
             </button>
-            <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <Users size={18}/> Usuarios
             </button>
-            <button onClick={() => setActiveTab('publications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'publications' ? 'bg-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('publications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'publications' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <Package size={18}/> Publicaciones
             </button>
-            <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-blue-600' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <LinkIcon size={18}/> Conexiones
             </button>
         </nav>
 
-        <button onClick={handleLogout} className="mt-auto flex items-center gap-3 text-slate-400 hover:text-white font-bold text-sm p-4 rounded-xl hover:bg-slate-800 transition-all">
+        <button onClick={handleLogout} className="mt-auto flex items-center gap-3 text-slate-400 hover:text-white font-bold text-sm p-4 rounded-xl hover:bg-rose-500/20 hover:text-rose-400 transition-all">
             <LogOut size={18}/> Cerrar Sesión
         </button>
       </aside>
@@ -307,7 +361,7 @@ const AdminDashboard = () => {
       {/* --- ÁREA DE CONTENIDO PRINCIPAL --- */}
       <main className="ml-64 flex-1 p-10 max-w-7xl">
         <header className="mb-10">
-            <h2 className="text-3xl font-black text-slate-800">Panel de Control</h2>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h2>
             <p className="text-slate-500 font-medium mt-1">Monitoreo en tiempo real de la red Smarfleet</p>
         </header>
 
@@ -332,23 +386,23 @@ const AdminDashboard = () => {
 
         {/* MÓDULO: RESUMEN (OVERVIEW) */}
         {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4">
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                     <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4"><Users size={24}/></div>
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Usuarios Registrados</p>
                     <p className="text-4xl font-black text-slate-800 mt-1">{users.length}</p>
                 </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Truck size={24}/></div>
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Viajes Publicados</p>
                     <p className="text-4xl font-black text-slate-800 mt-1">{trips.length}</p>
                 </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                     <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4"><Package size={24}/></div>
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Cargas Disponibles</p>
                     <p className="text-4xl font-black text-slate-800 mt-1">{loads.length}</p>
                 </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                     <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4"><LinkIcon size={24}/></div>
                     <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Matches / Conexiones</p>
                     <p className="text-4xl font-black text-slate-800 mt-1">{connections.length}</p>
@@ -358,22 +412,58 @@ const AdminDashboard = () => {
 
         {/* MÓDULO: USUARIOS */}
         {activeTab === 'users' && !dbError && (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800">Directorio de Usuarios</h3>
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Users size={18} className="text-blue-600"/> Directorio de Usuarios 
+                        <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full">{filteredUsers.length}</span>
+                    </h3>
+                    
+                    {/* BARRA DE FILTROS */}
+                    <div className="flex flex-col sm:flex-row w-full md:w-auto gap-2">
+                        <div className="relative">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                            <input 
+                                type="text" 
+                                placeholder="Buscar por email, empresa..." 
+                                className="w-full sm:w-64 pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-colors"
+                                value={usersFilter.search}
+                                onChange={e => setUsersFilter({...usersFilter, search: e.target.value})}
+                            />
+                        </div>
+                        <select 
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
+                            value={usersFilter.role}
+                            onChange={e => setUsersFilter({...usersFilter, role: e.target.value})}
+                        >
+                            <option value="all">Todos los Roles</option>
+                            <option value="carrier">Transportistas</option>
+                            <option value="shipper">Generadores</option>
+                        </select>
+                        <select 
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
+                            value={usersFilter.tier}
+                            onChange={e => setUsersFilter({...usersFilter, tier: e.target.value})}
+                        >
+                            <option value="all">Todos los Planes</option>
+                            <option value="premium">Premium</option>
+                            <option value="free">Free</option>
+                        </select>
+                    </div>
                 </div>
+                
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50 border-b border-slate-100">
+                        <thead className="bg-white border-b border-slate-100">
                             <tr>
-                                <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Empresa</th>
-                                <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Rol</th>
-                                <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Plan</th>
-                                <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Empresa</th>
+                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Rol</th>
+                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Plan</th>
+                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {users.map(u => (
+                            {filteredUsers.length > 0 ? filteredUsers.map(u => (
                                 <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                                     <td className="p-5">
                                         <div className="flex items-center gap-2">
@@ -383,24 +473,28 @@ const AdminDashboard = () => {
                                         <p className="text-xs text-slate-500 font-medium">{u.email || u.id}</p>
                                     </td>
                                     <td className="p-5">
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${u.role === 'carrier' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${u.role === 'carrier' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
                                             {u.role === 'carrier' ? 'Transportista' : 'Generador'}
                                         </span>
                                     </td>
                                     <td className="p-5">
                                         {u.tier === 'premium' ? (
-                                            <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full w-max"><AlertTriangle size={12}/> Premium</span>
+                                            <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1 rounded-lg w-max"><AlertTriangle size={12}/> Premium</span>
                                         ) : (
-                                            <span className="text-xs font-bold text-slate-500">Free</span>
+                                            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg">Free</span>
                                         )}
                                     </td>
                                     <td className="p-5 text-right">
-                                        <button onClick={() => setEditingUser(u)} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors">
-                                            Editar
+                                        <button onClick={() => setEditingUser(u)} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 ml-auto">
+                                            <Edit size={14}/> Editar
                                         </button>
                                     </td>
                                 </tr>
-                            ))}
+                            )) : (
+                                <tr>
+                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No se encontraron usuarios con esos filtros.</td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -409,47 +503,90 @@ const AdminDashboard = () => {
 
         {/* MÓDULO: PUBLICACIONES (Mercado Global) */}
         {activeTab === 'publications' && !dbError && (
-             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                 <div className="p-5 border-b border-slate-100 bg-slate-50">
-                    <h3 className="font-bold text-slate-800">Todas las Publicaciones (Mercado)</h3>
+             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                 <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Package size={18} className="text-emerald-600"/> Publicaciones Globales
+                        <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full">{filteredPubs.length}</span>
+                    </h3>
+
+                    {/* BARRA DE FILTROS */}
+                    <div className="flex flex-col sm:flex-row w-full md:w-auto gap-2">
+                        <div className="relative">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                            <input 
+                                type="text" 
+                                placeholder="Buscar ciudad, ID, empresa..." 
+                                className="w-full sm:w-64 pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-colors"
+                                value={pubsFilter.search}
+                                onChange={e => setPubsFilter({...pubsFilter, search: e.target.value})}
+                            />
+                        </div>
+                        <select 
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
+                            value={pubsFilter.type}
+                            onChange={e => setPubsFilter({...pubsFilter, type: e.target.value})}
+                        >
+                            <option value="all">Tipo (Todos)</option>
+                            <option value="trip">Viajes (Camiones)</option>
+                            <option value="load">Cargas</option>
+                        </select>
+                        <select 
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
+                            value={pubsFilter.status}
+                            onChange={e => setPubsFilter({...pubsFilter, status: e.target.value})}
+                        >
+                            <option value="all">Estado (Todos)</option>
+                            <option value="active">Activas</option>
+                            <option value="paused">Pausadas</option>
+                            <option value="completed">Completadas</option>
+                        </select>
+                    </div>
                  </div>
+
                  <div className="overflow-x-auto">
                      <table className="w-full text-left">
-                         <thead className="bg-slate-50 border-b border-slate-100">
+                         <thead className="bg-white border-b border-slate-100">
                              <tr>
-                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Tipo / Empresa</th>
-                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Ruta (Origen - Destino)</th>
-                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Fecha / Estatus</th>
-                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo / Empresa</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ruta (Origen - Destino)</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha / Estatus</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
                              </tr>
                          </thead>
                          <tbody className="divide-y divide-slate-100">
-                             {allPublications.map(pub => (
+                             {filteredPubs.length > 0 ? filteredPubs.map(pub => (
                                  <tr key={pub.id} className="hover:bg-slate-50/50 transition-colors">
                                      <td className="p-5">
-                                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase mb-1 ${pub.type === 'trip' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                         <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider mb-1.5 border ${pub.type === 'trip' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
                                              {pub.type === 'trip' ? 'Viaje' : 'Carga'}
                                          </span>
                                          <p className="font-bold text-slate-800 text-sm">{pub.company}</p>
-                                         <p className="text-xs text-slate-500 font-mono">ID: {pub.customId || pub.id.substring(0,6)}</p>
+                                         <p className="text-[10px] text-slate-500 font-mono mt-0.5 bg-slate-100 px-1.5 py-0.5 rounded w-max">ID: {pub.customId || pub.id.substring(0,6)}</p>
                                      </td>
                                      <td className="p-5">
                                          <p className="font-bold text-slate-800 text-sm">{pub.originCity || pub.originState}</p>
-                                         <p className="text-xs text-slate-500">{pub.destinationCity || pub.destinationState}</p>
+                                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                            <MapPin size={10} className="text-slate-400"/> {pub.destinationCity || pub.destinationState}
+                                         </p>
                                      </td>
                                      <td className="p-5">
-                                         <p className="font-bold text-slate-800 text-sm flex items-center gap-1"><Calendar size={12}/> {pub.date || 'Fija'}</p>
-                                         <span className={`text-[10px] font-bold ${pub.status === 'active' ? 'text-emerald-500' : pub.status === 'completed' ? 'text-blue-500' : 'text-amber-500'}`}>
+                                         <p className="font-bold text-slate-800 text-xs flex items-center gap-1"><Calendar size={12} className="text-blue-500"/> {pub.date || 'Fija'}</p>
+                                         <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold border ${pub.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : pub.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
                                             {pub.status === 'active' ? 'ACTIVA' : pub.status.toUpperCase()}
                                          </span>
                                      </td>
                                      <td className="p-5 text-right">
-                                         <button onClick={() => handleDeletePublication(pub.id, pub.type)} className="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 transition-colors" title="Borrar Publicación">
+                                         <button onClick={() => handleDeletePublication(pub.id, pub.type)} className="p-2.5 bg-white border border-rose-200 text-rose-500 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-colors shadow-sm ml-auto" title="Borrar Publicación">
                                              <Trash2 size={16}/>
                                          </button>
                                      </td>
                                  </tr>
-                             ))}
+                             )) : (
+                                <tr>
+                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No se encontraron publicaciones.</td>
+                                </tr>
+                             )}
                          </tbody>
                      </table>
                  </div>
@@ -458,42 +595,77 @@ const AdminDashboard = () => {
 
         {/* MÓDULO: CONEXIONES (Matches y Tracking) */}
         {activeTab === 'connections' && !dbError && (
-             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-                 <div className="p-5 border-b border-slate-100 bg-slate-50">
-                    <h3 className="font-bold text-slate-800">Tracking de Conexiones (Matches)</h3>
+             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+                 <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <LinkIcon size={18} className="text-purple-600"/> Tracking de Conexiones
+                        <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full">{filteredConns.length}</span>
+                    </h3>
+
+                     {/* BARRA DE FILTROS */}
+                     <div className="flex flex-col sm:flex-row w-full md:w-auto gap-2">
+                        <div className="relative">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+                            <input 
+                                type="text" 
+                                placeholder="Buscar empresa o ID..." 
+                                className="w-full sm:w-64 pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 transition-colors"
+                                value={connsFilter.search}
+                                onChange={e => setConnsFilter({...connsFilter, search: e.target.value})}
+                            />
+                        </div>
+                        <select 
+                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-purple-500"
+                            value={connsFilter.status}
+                            onChange={e => setConnsFilter({...connsFilter, status: e.target.value})}
+                        >
+                            <option value="all">Cualquier Estatus</option>
+                            <option value="pending">Solicitud Pendiente</option>
+                            <option value="accepted">Aceptada / En Contacto</option>
+                            <option value="confirmed">Viaje Confirmado</option>
+                            <option value="completed">Completado</option>
+                            <option value="terminated">Cancelado</option>
+                        </select>
+                    </div>
                  </div>
+                 
                  <div className="overflow-x-auto">
                      <table className="w-full text-left">
-                         <thead className="bg-slate-50 border-b border-slate-100">
+                         <thead className="bg-white border-b border-slate-100">
                              <tr>
-                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Participantes</th>
-                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Estatus de Solicitud</th>
-                                 <th className="p-5 text-xs font-black text-slate-400 uppercase tracking-widest">Estatus del Viaje</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Participantes</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Solicitud Inicial</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estatus del Viaje</th>
                              </tr>
                          </thead>
                          <tbody className="divide-y divide-slate-100">
-                             {connections.map(conn => (
+                             {filteredConns.length > 0 ? filteredConns.map(conn => (
                                  <tr key={conn.id} className="hover:bg-slate-50/50 transition-colors">
                                      <td className="p-5">
-                                         <p className="text-xs font-bold text-blue-600 mb-1">De: <span className="text-slate-800">{conn.fromName}</span></p>
-                                         <p className="text-xs font-bold text-emerald-600">Para: <span className="text-slate-800">{conn.toName}</span></p>
+                                         <p className="text-xs font-bold text-blue-600 mb-1.5 flex items-center gap-1.5"><MapPin size={12}/> De: <span className="text-slate-800">{conn.fromName}</span></p>
+                                         <p className="text-xs font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle size={12}/> Para: <span className="text-slate-800">{conn.toName}</span></p>
+                                         <p className="text-[9px] text-slate-400 font-mono mt-2">Ref: {conn.id.substring(0,8)}</p>
                                      </td>
                                      <td className="p-5">
-                                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${conn.status === 'accepted' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                         <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${conn.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
                                              {conn.status === 'accepted' ? 'Aceptada' : 'Pendiente'}
                                          </span>
                                      </td>
                                      <td className="p-5">
                                          {conn.status === 'accepted' ? (
-                                             <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${conn.tripStatus === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-200' : conn.tripStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                                {conn.tripStatus ? conn.tripStatus.toUpperCase() : 'EN PROCESO'}
+                                             <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border ${conn.tripStatus === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-200' : conn.tripStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                                {conn.tripStatus ? conn.tripStatus.toUpperCase() : 'SOLO CONTACTO'}
                                              </span>
                                          ) : (
-                                            <span className="text-xs text-slate-400">-</span>
+                                            <span className="text-xs font-medium text-slate-400">-</span>
                                          )}
                                      </td>
                                  </tr>
-                             ))}
+                             )) : (
+                                <tr>
+                                    <td colSpan="3" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
+                                </tr>
+                             )}
                          </tbody>
                      </table>
                  </div>
