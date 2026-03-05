@@ -4,7 +4,8 @@ import {
   Shield, Users, Truck, Package, LogOut, 
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
-  Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight
+  Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
+  Bell, Megaphone, Send, Info
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -12,7 +13,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { 
   getFirestore, collectionGroup, collection, query, onSnapshot, 
-  doc, getDoc, updateDoc, deleteDoc
+  doc, getDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -378,10 +379,14 @@ const AdminDashboard = () => {
   
   // Estados para Modales
   const [editingUser, setEditingUser] = useState(null);
-  const [viewingUser, setViewingUser] = useState(null); // 🔥 Nuevo Estado
+  const [viewingUser, setViewingUser] = useState(null);
   
-  // Nuevo estado para capturar errores de índices o permisos
+  // Estado para capturar errores de índices o permisos
   const [dbError, setDbError] = useState(null);
+
+  // --- ESTADOS PARA DIFUSIÓN GLOBAL ---
+  const [notifForm, setNotifForm] = useState({ title: '', message: '', type: 'info' });
+  const [sendingNotif, setSendingNotif] = useState(false);
 
   // --- ESTADOS PARA FILTROS ---
   const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all', status: 'all' });
@@ -446,6 +451,58 @@ const AdminDashboard = () => {
           await deleteDoc(doc(db, 'artifacts', projectId, 'public', 'data', collectionName, id));
       } catch (error) {
           alert("Error al eliminar: " + error.message);
+      }
+  };
+
+  // 🔥 FUNCIÓN PARA DIFUSIÓN GLOBAL (BROADCAST) 🔥
+  const handleSendGlobalNotification = async (e) => {
+      e.preventDefault();
+      if (!notifForm.title || !notifForm.message) return;
+      
+      const validUsers = users.filter(u => !u.isSuspended); // Opcional: solo enviar a activos
+      if (!window.confirm(`Estás a punto de enviar una alerta oficial a ${validUsers.length} usuarios activos. ¿Deseas continuar?`)) return;
+
+      setSendingNotif(true);
+      try {
+          // Firebase permite hasta 500 escrituras por Batch. Dividiremos en fragmentos de 450 por seguridad.
+          const batches = [];
+          let currentBatch = writeBatch(db);
+          let opCount = 0;
+
+          validUsers.forEach((u) => {
+              const notifRef = doc(collection(db, 'artifacts', projectId, 'public', 'data', 'notifications'));
+              currentBatch.set(notifRef, {
+                  toUserId: u.id,
+                  fromUserId: 'ADMIN_SYSTEM', // Marca especial para alertas de administrador
+                  type: 'global_alert',
+                  alertType: notifForm.type, // 'info', 'warning', 'success'
+                  title: notifForm.title,
+                  message: notifForm.message,
+                  unread: true,
+                  createdAt: serverTimestamp()
+              });
+              
+              opCount++;
+              if (opCount === 450) {
+                  batches.push(currentBatch.commit());
+                  currentBatch = writeBatch(db);
+                  opCount = 0;
+              }
+          });
+
+          if (opCount > 0) {
+              batches.push(currentBatch.commit());
+          }
+
+          await Promise.all(batches);
+          alert(`¡Éxito! Notificación enviada a ${validUsers.length} usuarios de forma segura.`);
+          setNotifForm({ title: '', message: '', type: 'info' });
+          
+      } catch (error) {
+          alert("Hubo un error al enviar el Broadcast: " + error.message);
+          console.error(error);
+      } finally {
+          setSendingNotif(false);
       }
   };
 
@@ -564,6 +621,14 @@ const AdminDashboard = () => {
             </button>
             <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <LinkIcon size={18}/> Conexiones
+            </button>
+            
+            <div className="pt-4 pb-2">
+                <div className="h-px bg-slate-800 w-full mb-2"></div>
+            </div>
+
+            <button onClick={() => setActiveTab('notifications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'notifications' ? 'bg-indigo-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                <Bell size={18}/> Anuncios
             </button>
         </nav>
 
@@ -719,6 +784,114 @@ const AdminDashboard = () => {
                     </div>
                 </div>
 
+            </div>
+        )}
+
+        {/* 🔥 MÓDULO: NOTIFICACIONES GLOBALES (BROADCAST) 🔥 */}
+        {activeTab === 'notifications' && !dbError && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                 
+                 <div className="grid lg:grid-cols-2 gap-8">
+                     
+                     {/* Formulario de Envío */}
+                     <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
+                          <Megaphone size={160} className="absolute -right-8 -bottom-10 text-slate-50 pointer-events-none"/>
+                          <div className="relative z-10">
+                              <h3 className="font-black text-2xl text-slate-800 mb-2">Centro de Difusión</h3>
+                              <p className="text-slate-500 text-sm mb-8">Envía un aviso oficial que aparecerá en el panel de notificaciones de todos los usuarios activos.</p>
+
+                              <form onSubmit={handleSendGlobalNotification} className="space-y-6">
+                                   <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Tipo de Alerta</label>
+                                        <select 
+                                            value={notifForm.type} 
+                                            onChange={e => setNotifForm({...notifForm, type: e.target.value})} 
+                                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all cursor-pointer"
+                                        >
+                                            <option value="info">ℹ️ Aviso Informativo</option>
+                                            <option value="warning">⚠️ Mantenimiento o Alerta</option>
+                                            <option value="success">🎉 Promoción / Novedad</option>
+                                        </select>
+                                   </div>
+                                   
+                                   <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Título del Mensaje</label>
+                                        <input 
+                                            required 
+                                            type="text" 
+                                            placeholder="Ej. Actualización del Sistema v2.0" 
+                                            value={notifForm.title} 
+                                            onChange={e => setNotifForm({...notifForm, title: e.target.value})} 
+                                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all" 
+                                        />
+                                   </div>
+                                   
+                                   <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Contenido Detallado</label>
+                                        <textarea 
+                                            required 
+                                            rows="5" 
+                                            placeholder="Escribe aquí el detalle completo para los usuarios..." 
+                                            value={notifForm.message} 
+                                            onChange={e => setNotifForm({...notifForm, message: e.target.value})} 
+                                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all resize-none"
+                                        ></textarea>
+                                   </div>
+                                   
+                                   <button 
+                                       type="submit" 
+                                       disabled={sendingNotif || users.filter(u => !u.isSuspended).length === 0} 
+                                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm py-4 px-8 rounded-xl shadow-xl shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                   >
+                                       {sendingNotif ? (
+                                           <>Enviando... por favor espera</>
+                                       ) : (
+                                           <><Send size={18}/> Enviar a {users.filter(u => !u.isSuspended).length} usuarios activos</>
+                                       )}
+                                   </button>
+                              </form>
+                          </div>
+                     </div>
+
+                     {/* Panel Lateral: Vista Previa */}
+                     <div className="flex flex-col gap-6">
+                         <div className="bg-slate-100 p-8 rounded-3xl border border-slate-200 flex-1 flex flex-col justify-center items-center relative shadow-inner">
+                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 absolute top-6 left-1/2 -translate-x-1/2">
+                                 Vista Previa del Usuario
+                             </p>
+                             
+                             {/* Tarjeta de Notificación Simulada */}
+                             <div className={`w-full max-w-sm p-5 rounded-2xl shadow-md border flex items-start gap-4 transition-all duration-300 ${
+                                 notifForm.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-900' : 
+                                 notifForm.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 
+                                 'bg-blue-50 border-blue-200 text-blue-900'
+                             }`}>
+                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                                      notifForm.type === 'warning' ? 'bg-amber-200 text-amber-700' : 
+                                      notifForm.type === 'success' ? 'bg-emerald-200 text-emerald-700' : 
+                                      'bg-blue-200 text-blue-700'
+                                  }`}>
+                                       {notifForm.type === 'warning' ? <AlertTriangle size={20}/> : 
+                                        notifForm.type === 'success' ? <CheckCircle size={20}/> : 
+                                        <Info size={20}/>}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                       <div className="flex justify-between items-start gap-2">
+                                            <h4 className="font-black text-sm leading-tight">{notifForm.title || 'Título del Mensaje'}</h4>
+                                            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1"></span>
+                                       </div>
+                                       <p className="text-xs mt-2 opacity-80 leading-relaxed font-medium">
+                                           {notifForm.message || 'El contenido de tu anuncio aparecerá aquí y podrá ser leído por todos los usuarios en su centro de notificaciones personal.'}
+                                       </p>
+                                       <p className="text-[9px] font-bold opacity-50 mt-3 uppercase tracking-widest">
+                                           Smarfleet Admin • Ahora
+                                       </p>
+                                  </div>
+                             </div>
+                         </div>
+                     </div>
+
+                 </div>
             </div>
         )}
 
