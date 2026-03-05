@@ -322,12 +322,10 @@ const AdminDashboard = () => {
                     Sugerencia: Revisa la Regla 5 en Firestore (collectionGroup). Debe ser algo como:<br/>
                     <br/>
                     <code>
-                        match /{`{path=**}`}/profile/data {'{'}<br/>
+                        match /{`{path=**}`}/profile/{`{docId}`} {'{'}<br/>
                         &nbsp;&nbsp;allow read: if request.auth != null;<br/>
                         {'}'}
                     </code>
-                    <br/><br/>
-                    Por ahora, para asegurar que funcione, puedes poner `allow read: if request.auth != null;` en la regla global de perfiles.
                 </div>
             </div>
         )}
