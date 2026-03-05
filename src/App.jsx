@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { 
   Shield, Users, Truck, Package, LogOut, 
   Search, AlertTriangle, CheckCircle, XCircle, X,
-  MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter
+  MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
+  Leaf, TrendingUp, BarChart3, Activity
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -326,6 +327,36 @@ const AdminDashboard = () => {
       });
   }, [connections, connsFilter]);
 
+  // --- CÁLCULOS DE ESTADÍSTICAS Y GRÁFICAS ---
+  const stats = useMemo(() => {
+      const carriers = users.filter(u => u.role === 'carrier').length;
+      const shippers = users.filter(u => u.role === 'shipper').length;
+      
+      const activePubs = allPublications.filter(p => p.status === 'active').length;
+      const completedPubs = allPublications.filter(p => p.status === 'completed').length;
+      const pausedPubs = allPublications.filter(p => p.status === 'paused').length;
+
+      // Cálculo de Impacto Ambiental (Aproximación basada en matches completados)
+      const completedMatches = connections.filter(c => c.tripStatus === 'completed');
+      
+      // Asumimos un promedio de 450 km por viaje vacío evitado
+      const kmSavedPerMatch = 450; 
+      // Emisión promedio de un tractocamión diesel: ~1.05 kg de CO2 por kilómetro
+      const co2KgPerKm = 1.05; 
+
+      const totalKmSaved = completedMatches.length * kmSavedPerMatch;
+      const totalCo2SavedKg = totalKmSaved * co2KgPerKm;
+      const totalCo2SavedTons = (totalCo2SavedKg / 1000).toFixed(1); // Convertir a Toneladas
+
+      return {
+          carriers, shippers,
+          activePubs, completedPubs, pausedPubs,
+          totalKmSaved,
+          totalCo2SavedTons,
+          completedMatchesCount: completedMatches.length
+      };
+  }, [users, allPublications, connections]);
+
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-left font-sans">
@@ -340,7 +371,7 @@ const AdminDashboard = () => {
         
         <nav className="flex-1 space-y-2">
             <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-                <Search size={18}/> Resumen
+                <BarChart3 size={18}/> Resumen
             </button>
             <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <Users size={18}/> Usuarios
@@ -384,29 +415,126 @@ const AdminDashboard = () => {
             </div>
         )}
 
-        {/* MÓDULO: RESUMEN (OVERVIEW) */}
+        {/* MÓDULO: RESUMEN Y GRÁFICAS (OVERVIEW) */}
         {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4"><Users size={24}/></div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Usuarios Registrados</p>
-                    <p className="text-4xl font-black text-slate-800 mt-1">{users.length}</p>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                
+                {/* 1. Tarjetas Superiores (Totales) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4"><Users size={24}/></div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Usuarios Registrados</p>
+                        <p className="text-4xl font-black text-slate-800 mt-1">{users.length}</p>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Truck size={24}/></div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Viajes Publicados</p>
+                        <p className="text-4xl font-black text-slate-800 mt-1">{trips.length}</p>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4"><Package size={24}/></div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Cargas Disponibles</p>
+                        <p className="text-4xl font-black text-slate-800 mt-1">{loads.length}</p>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                        <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4"><LinkIcon size={24}/></div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Matches en Curso</p>
+                        <p className="text-4xl font-black text-slate-800 mt-1">{connections.length}</p>
+                    </div>
                 </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Truck size={24}/></div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Viajes Publicados</p>
-                    <p className="text-4xl font-black text-slate-800 mt-1">{trips.length}</p>
+
+                {/* 2. Sección de Impacto Ambiental e Indicadores Críticos */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Tarjeta Impacto Ambiental */}
+                    <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-8 rounded-3xl shadow-lg shadow-emerald-600/20 text-white relative overflow-hidden">
+                        <Leaf size={140} className="absolute -bottom-6 -right-6 opacity-10 pointer-events-none transform rotate-12"/>
+                        <h3 className="text-sm font-black text-emerald-100 uppercase tracking-widest mb-6 flex items-center gap-2">
+                            <Activity size={18}/> Impacto Ambiental (Smarfleet)
+                        </h3>
+                        <div className="grid grid-cols-2 gap-6 relative z-10">
+                            <div>
+                                <p className="text-5xl font-black">{stats.totalKmSaved.toLocaleString()}</p>
+                                <p className="text-sm font-medium text-emerald-100 mt-2">Kilómetros Vacíos Optimizados</p>
+                            </div>
+                            <div>
+                                <p className="text-5xl font-black">{stats.totalCo2SavedTons}</p>
+                                <p className="text-sm font-medium text-emerald-100 mt-2">Toneladas de CO₂ Evitadas</p>
+                            </div>
+                        </div>
+                        <div className="mt-6 pt-4 border-t border-emerald-500/50 flex justify-between items-center">
+                            <span className="text-xs font-bold text-emerald-100">Cálculo basado en {stats.completedMatchesCount} viajes completados.</span>
+                            <div className="w-2 h-2 bg-emerald-300 rounded-full animate-ping"></div>
+                        </div>
+                    </div>
+
+                    {/* Gráficas Visuales (Puras CSS/Tailwind) */}
+                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-8">
+                        
+                        {/* Gráfica 1: Distribución de Usuarios */}
+                        <div>
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <Users size={14}/> Distribución de Perfiles
+                            </h3>
+                            <div className="flex h-32 items-end gap-4">
+                                {/* Barra Transportistas */}
+                                <div className="flex-1 flex flex-col justify-end items-center group relative">
+                                    <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md">{stats.carriers}</div>
+                                    <div className="w-full bg-indigo-500 rounded-t-xl transition-all duration-1000 ease-out" 
+                                         style={{ height: `${users.length > 0 ? (stats.carriers / users.length) * 100 : 0}%`, minHeight: '10%' }}></div>
+                                    <span className="text-[10px] font-bold text-slate-500 mt-2">Transportistas</span>
+                                </div>
+                                {/* Barra Generadores */}
+                                <div className="flex-1 flex flex-col justify-end items-center group relative">
+                                    <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">{stats.shippers}</div>
+                                    <div className="w-full bg-emerald-500 rounded-t-xl transition-all duration-1000 ease-out" 
+                                         style={{ height: `${users.length > 0 ? (stats.shippers / users.length) * 100 : 0}%`, minHeight: '10%' }}></div>
+                                    <span className="text-[10px] font-bold text-slate-500 mt-2">Generadores</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Gráfica 2: Estado de Publicaciones */}
+                        <div>
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                                <TrendingUp size={14}/> Actividad del Mercado
+                            </h3>
+                            <div className="space-y-4">
+                                {/* Barra Activas */}
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-[10px] font-bold">
+                                        <span className="text-slate-600">Activas ({stats.activePubs})</span>
+                                        <span className="text-blue-600">{allPublications.length > 0 ? Math.round((stats.activePubs / allPublications.length) * 100) : 0}%</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${allPublications.length > 0 ? (stats.activePubs / allPublications.length) * 100 : 0}%` }}></div>
+                                    </div>
+                                </div>
+                                {/* Barra Completadas */}
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-[10px] font-bold">
+                                        <span className="text-slate-600">Completadas ({stats.completedPubs})</span>
+                                        <span className="text-emerald-600">{allPublications.length > 0 ? Math.round((stats.completedPubs / allPublications.length) * 100) : 0}%</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${allPublications.length > 0 ? (stats.completedPubs / allPublications.length) * 100 : 0}%` }}></div>
+                                    </div>
+                                </div>
+                                {/* Barra Pausadas */}
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-[10px] font-bold">
+                                        <span className="text-slate-600">Pausadas ({stats.pausedPubs})</span>
+                                        <span className="text-amber-500">{allPublications.length > 0 ? Math.round((stats.pausedPubs / allPublications.length) * 100) : 0}%</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-amber-400 rounded-full" style={{ width: `${allPublications.length > 0 ? (stats.pausedPubs / allPublications.length) * 100 : 0}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4"><Package size={24}/></div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Cargas Disponibles</p>
-                    <p className="text-4xl font-black text-slate-800 mt-1">{loads.length}</p>
-                </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                    <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4"><LinkIcon size={24}/></div>
-                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Matches / Conexiones</p>
-                    <p className="text-4xl font-black text-slate-800 mt-1">{connections.length}</p>
-                </div>
+
             </div>
         )}
 
