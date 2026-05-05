@@ -5,7 +5,7 @@ import {
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
   Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
-  Bell, Megaphone, Send, Info, ChevronLeft
+  Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -15,6 +15,7 @@ import {
   getFirestore, collectionGroup, collection, query, onSnapshot, 
   doc, getDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
@@ -28,6 +29,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
 
 // ============================================================================
@@ -423,6 +425,7 @@ const AdminDashboard = () => {
   
   // Estado para Gráficas Analíticas
   const [trendMonthsRange, setTrendMonthsRange] = useState(6);
+  const [resolvingDispute, setResolvingDispute] = useState(null); // Estado para el loader del botón de disputa
 
   // --- ESTADOS PARA PAGINACIÓN ---
   const [pageUsers, setPageUsers] = useState(1);
@@ -483,6 +486,24 @@ const AdminDashboard = () => {
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/');
+  };
+
+  // 🔥 NUEVA FUNCIÓN PARA RESOLVER DISPUTAS DESDE EL ADMIN 🔥
+  const handleResolveDispute = async (conn, winner) => {
+      const winnerText = winner === 'carrier' ? 'TRANSPORTISTA (Se le pagará el viaje)' : 'GENERADOR (Se le reembolsará su dinero)';
+      if(!window.confirm(`⚠️ ACCIÓN IRREVERSIBLE ⚠️\n\n¿Confirmas que deseas resolver esta disputa a favor del ${winnerText}?`)) return;
+
+      setResolvingDispute(conn.id);
+      try {
+          const resolveDisputeFn = httpsCallable(functions, 'resolveDisputeAdmin');
+          await resolveDisputeFn({ connectionId: conn.id, winner: winner, appId: projectId });
+          alert("¡Disputa resuelta y fondos movidos exitosamente!");
+      } catch (error) {
+          console.error(error);
+          alert("Hubo un error al comunicar con el servidor de pagos: " + error.message);
+      } finally {
+          setResolvingDispute(null);
+      }
   };
 
   const handleDeletePublication = async (id, type) => {
@@ -592,7 +613,9 @@ const AdminDashboard = () => {
               c.toName?.toLowerCase().includes(searchLower) ||
               c.id.toLowerCase().includes(searchLower);
           
-          const targetStatus = c.tripStatus || c.status;
+          let targetStatus = c.tripStatus || c.status;
+          if (c.isDisputed === true || c.tripStatus === 'disputed') targetStatus = 'disputed'; // Forzamos el status a "disputed" para el filtro
+
           const matchesStatus = connsFilter.status === 'all' || targetStatus === connsFilter.status;
 
           return matchesSearch && matchesStatus;
@@ -1238,16 +1261,16 @@ const AdminDashboard = () => {
              </div>
         )}
 
-        {/* MÓDULO: CONEXIONES (Matches y Tracking) */}
+        {/* MÓDULO: CONEXIONES (Matches, Tracking y DISPUTAS) */}
         {activeTab === 'connections' && !dbError && (
              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
                  <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <LinkIcon size={18} className="text-purple-600"/> Tracking de Conexiones
+                        <LinkIcon size={18} className="text-purple-600"/> Tracking y Resolución de Disputas
                         <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full">{filteredConns.length}</span>
                     </h3>
 
-                     {/* BARRA DE FILTROS */}
+                     {/* BARRA DE FILTROS ACTUALIZADA PARA DISPUTAS */}
                      <div className="flex flex-col sm:flex-row w-full md:w-auto gap-2">
                         <div className="relative">
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
@@ -1265,6 +1288,7 @@ const AdminDashboard = () => {
                             onChange={e => setConnsFilter({...connsFilter, status: e.target.value})}
                         >
                             <option value="all">Cualquier Estatus</option>
+                            <option value="disputed">⚠️ EN DISPUTA</option>
                             <option value="pending">Solicitud Pendiente</option>
                             <option value="accepted">Aceptada / En Contacto</option>
                             <option value="confirmed">Viaje Confirmado</option>
@@ -1279,36 +1303,70 @@ const AdminDashboard = () => {
                          <thead className="bg-white border-b border-slate-100">
                              <tr>
                                  <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Participantes</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Solicitud Inicial</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estatus del Viaje</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estatus / Pago</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Disputa / Detalles</th>
+                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
                              </tr>
                          </thead>
                          <tbody className="divide-y divide-slate-100">
                              {pagedConns.length > 0 ? pagedConns.map(conn => (
-                                 <tr key={conn.id} className="hover:bg-slate-50/50 transition-colors">
+                                 <tr key={conn.id} className={`transition-colors ${conn.isDisputed ? 'bg-red-50/30' : 'hover:bg-slate-50/50'}`}>
                                      <td className="p-5">
                                          <p className="text-xs font-bold text-blue-600 mb-1.5 flex items-center gap-1.5"><MapPin size={12}/> De: <span className="text-slate-800">{conn.fromName}</span></p>
                                          <p className="text-xs font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle size={12}/> Para: <span className="text-slate-800">{conn.toName}</span></p>
                                          <p className="text-[9px] text-slate-400 font-mono mt-2">Ref: {conn.id.substring(0,8)}</p>
                                      </td>
                                      <td className="p-5">
-                                         <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${conn.status === 'accepted' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-                                             {conn.status === 'accepted' ? 'Aceptada' : 'Pendiente'}
-                                         </span>
-                                     </td>
-                                     <td className="p-5">
-                                         {conn.status === 'accepted' ? (
-                                             <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border ${conn.tripStatus === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-200' : conn.tripStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                                                {conn.tripStatus ? conn.tripStatus.toUpperCase() : 'SOLO CONTACTO'}
+                                         {conn.isDisputed ? (
+                                             <span className="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border bg-red-100 text-red-700 border-red-200 flex items-center gap-1 w-max">
+                                                 <AlertTriangle size={12}/> EN DISPUTA
                                              </span>
                                          ) : (
-                                            <span className="text-xs font-medium text-slate-400">-</span>
+                                             <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${conn.tripStatus === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-200' : conn.tripStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                                {conn.tripStatus ? conn.tripStatus : (conn.status === 'accepted' ? 'ACEPTADA' : 'PENDIENTE')}
+                                             </span>
+                                         )}
+                                         {conn.paymentStatus === 'funded' && <p className="text-[9px] font-black text-indigo-600 mt-2 flex items-center gap-1"><ShieldCheck size={10}/> PAGO SEGURO RETENIDO</p>}
+                                     </td>
+                                     <td className="p-5">
+                                         {conn.isDisputed ? (
+                                             <div className="text-xs">
+                                                 <p className="font-bold text-red-800 mb-1">Motivo: <span className="font-medium text-red-600">{conn.disputeDetails?.reason || 'No especificado'}</span></p>
+                                                 <p className="text-[9px] text-red-500">Abierta por: {conn.disputeDetails?.openedByName}</p>
+                                             </div>
+                                         ) : (
+                                             <span className="text-xs font-medium text-slate-400">Sin incidencias</span>
+                                         )}
+                                     </td>
+                                     <td className="p-5 text-right">
+                                         {/* BOTONES ADMINISTRATIVOS DE RESOLUCIÓN DE DISPUTAS */}
+                                         {conn.isDisputed && conn.paymentStatus === 'funded' ? (
+                                             <div className="flex flex-col gap-2 w-max ml-auto">
+                                                 <button 
+                                                     disabled={resolvingDispute === conn.id}
+                                                     onClick={() => handleResolveDispute(conn, 'carrier')}
+                                                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                 >
+                                                     {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <Truck size={12}/>} 
+                                                     Liberar a Transportista
+                                                 </button>
+                                                 <button 
+                                                     disabled={resolvingDispute === conn.id}
+                                                     onClick={() => handleResolveDispute(conn, 'shipper')}
+                                                     className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                 >
+                                                     {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <RotateCcw size={12}/>} 
+                                                     Reembolsar a Cliente
+                                                 </button>
+                                             </div>
+                                         ) : (
+                                             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Sin Acciones</span>
                                          )}
                                      </td>
                                  </tr>
                              )) : (
                                 <tr>
-                                    <td colSpan="3" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
+                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
                                 </tr>
                              )}
                          </tbody>
