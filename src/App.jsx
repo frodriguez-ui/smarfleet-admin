@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
   Shield, Users, User as UserIcon, Truck, Package, LogOut, 
@@ -32,6 +32,29 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
+
+// ============================================================================
+// --- CARGADOR NATIVO DE GOOGLE MAPS (SIN LIBRERÍAS EXTERNAS) ---
+// ============================================================================
+const loadGoogleMapsScript = (apiKey, callback) => {
+    if (!apiKey) return;
+    if (window.google && window.google.maps) {
+        callback();
+        return;
+    }
+    const existingScript = document.getElementById('googleMapsNativeScript');
+    if (existingScript) {
+        existingScript.addEventListener('load', callback);
+        return;
+    }
+    const script = document.createElement('script');
+    script.id = 'googleMapsNativeScript';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.async = true;
+    script.defer = true;
+    script.onload = callback;
+    document.body.appendChild(script);
+};
 
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
@@ -338,7 +361,9 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
 // 3. MODAL DE DETALLE DE CONEXIÓN Y CHAT (EXCLUSIVO ADMIN)
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
+    const [trackingHistory, setTrackingHistory] = useState([]);
     const [isLoadingChat, setIsLoadingChat] = useState(true);
+    const mapRef = useRef(null);
 
     const post = [...trips, ...loads].find(p => p.id === conn.postId);
     const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
@@ -346,30 +371,116 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
 
     const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
-    // Cargar historial de chat de esta conexión
+    // 1. CARGAR CHAT E HISTORIAL DE RUTA DESDE FIREBASE
     useEffect(() => {
         setIsLoadingChat(true);
-        const q = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages'), orderBy('timestamp', 'asc'));
-        const unsub = onSnapshot(q, snap => {
+        
+        // Historial de mensajes
+        const qMsg = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages'), orderBy('timestamp', 'asc'));
+        const unsubMsg = onSnapshot(qMsg, snap => {
             setMessages(snap.docs.map(d => ({id: d.id, ...d.data()})));
             setIsLoadingChat(false);
         }, (err) => {
             console.error("Error cargando chat:", err);
             setIsLoadingChat(false);
         });
-        return () => unsub();
-    }, [conn.id]);
 
-    // Calcular strings para el mapa en Iframe (Ruta Real con Waypoints)
-    let mapUrl = "";
-    const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
-    const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
-    
-    mapUrl = `https://www.google.com/maps/embed/v1/directions?key=${googleApiKey}&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destStr)}`;
-    // Si hay una ubicación en vivo, forzamos a que la ruta pase por ahí (Waypoint) para ver el trayecto real
-    if (conn.liveLocation && conn.liveLocation.lat && conn.liveLocation.lng) {
-        mapUrl += `&waypoints=${conn.liveLocation.lat},${conn.liveLocation.lng}`;
-    }
+        // Historial logístico real (Migas de pan GPS)
+        const qTrack = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'trackingLogs'), orderBy('timestamp', 'asc'));
+        const unsubTrack = onSnapshot(qTrack, snap => {
+            const logs = snap.docs.map(d => d.data());
+            let combined = [...(conn.trackingHistory || []), ...logs];
+            
+            // Remover duplicados exactos
+            const unique = [];
+            const seen = new Set();
+            combined.forEach(item => {
+                const key = `${item.lat}-${item.lng}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    unique.push(item);
+                }
+            });
+            unique.sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+            setTrackingHistory(unique);
+        });
+
+        return () => { unsubMsg(); unsubTrack(); };
+    }, [conn.id, conn.trackingHistory]);
+
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO CON DOBLE LÍNEA
+    useEffect(() => {
+        if (!googleApiKey || !mapRef.current) return;
+        
+        loadGoogleMapsScript(googleApiKey, () => {
+            const map = new window.google.maps.Map(mapRef.current, {
+                zoom: 5,
+                center: { lat: 23.6345, lng: -102.5528 }, // Centro de México
+                disableDefaultUI: true,
+                zoomControl: true
+            });
+
+            // A) DIBUJAR RUTA PLANEADA (Línea Gris Punteada)
+            const directionsService = new window.google.maps.DirectionsService();
+            const directionsRenderer = new window.google.maps.DirectionsRenderer({
+                map,
+                suppressMarkers: false,
+                polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
+            });
+
+            const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
+            const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
+
+            if (originStr && destStr) {
+                directionsService.route({
+                    origin: originStr,
+                    destination: destStr,
+                    travelMode: window.google.maps.TravelMode.DRIVING,
+                }).then(response => {
+                    directionsRenderer.setDirections(response);
+                }).catch(e => console.warn("No se pudo calcular la ruta planeada", e));
+            }
+
+            // B) DIBUJAR RUTA REAL RECORRIDA POR EL TRANSPORTISTA (Línea Azul Fuerte)
+            if (trackingHistory.length > 0) {
+                const routePath = trackingHistory.filter(h => h.lat && h.lng).map(h => ({ lat: Number(h.lat), lng: Number(h.lng) }));
+                if (routePath.length > 0) {
+                    new window.google.maps.Polyline({
+                        path: routePath,
+                        geodesic: true,
+                        strokeColor: '#3b82f6', // Azul 500
+                        strokeOpacity: 1.0,
+                        strokeWeight: 5,
+                        map
+                    });
+                }
+            }
+
+            // C) MARCADOR DE UBICACIÓN ACTUAL GPS
+            if (conn.liveLocation?.lat && conn.liveLocation?.lng) {
+                const currentPos = { lat: Number(conn.liveLocation.lat), lng: Number(conn.liveLocation.lng) };
+                new window.google.maps.Marker({
+                    position: currentPos,
+                    map,
+                    title: 'Ubicación GPS Actual',
+                    icon: {
+                        path: window.google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: '#ef4444', // Rojo
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2,
+                    },
+                    zIndex: 999
+                });
+                // Centrar automáticamente en la ubicación GPS
+                setTimeout(() => {
+                    map.panTo(currentPos);
+                    map.setZoom(11);
+                }, 500);
+            }
+        });
+    }, [trackingHistory, post, conn.liveLocation, googleApiKey]);
 
     // Extraer y procesar Hoja de Ruta para el Top Banner (Horizontal)
     const tl = conn.timeline || {};
@@ -382,10 +493,8 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         { id: 'completed', label: "Finalizado", time: tl.completed || tl.terminated, icon: ShieldCheck }
     ];
 
-    // Calcular en qué paso vamos para la barra de progreso
     let currentStepIndex = 0;
     trackingSteps.forEach((s, i) => { if (s.time) currentStepIndex = i; });
-    const progressPercentage = trackingSteps.length > 1 ? (currentStepIndex / (trackingSteps.length - 1)) * 100 : 0;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
@@ -410,13 +519,11 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                 {/* Contenido Principal con Scroll */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col gap-5">
                     
-                    {/* 1. TOP BANNER: HOJA DE RUTA HORIZONTAL (ESTILO PAQUETERÍA) */}
+                    {/* 1. TOP BANNER: HOJA DE RUTA HORIZONTAL */}
                     <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto hide-scrollbar shrink-0">
                         <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Truck size={14}/> Hoja de Ruta</h4>
                         <div className="min-w-[600px] relative px-4 pb-2">
-                            {/* Línea Base (Gris) */}
                             <div className="absolute top-5 left-[3.5rem] right-[3.5rem] h-1 bg-slate-100 rounded-full z-0"></div>
-                            {/* Línea Activa (Verde) */}
                             <div className="absolute top-5 left-[3.5rem] h-1 bg-emerald-500 rounded-full z-0 transition-all duration-700" style={{ width: `calc((100% - 7rem) * ${currentStepIndex / (trackingSteps.length - 1)})` }}></div>
 
                             <div className="flex justify-between relative z-10">
@@ -446,11 +553,11 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                             </div>
                             
                             {isFunded ? (
-                                <div className="flex items-center gap-2 shrink-0 w-full md:w-auto mt-2 md:mt-0">
+                                <div className="flex flex-row gap-2 mt-1 md:mt-0 w-full md:w-auto shrink-0">
                                     <button 
                                         disabled={resolvingDispute === conn.id}
                                         onClick={() => handleResolveDispute(conn, 'carrier')}
-                                        className="flex-1 md:flex-none px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                        className="flex-1 md:flex-none py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                                     >
                                         {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <Truck size={14}/>} 
                                         Pagar a Transp.
@@ -458,7 +565,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                     <button 
                                         disabled={resolvingDispute === conn.id}
                                         onClick={() => handleResolveDispute(conn, 'shipper')}
-                                        className="flex-1 md:flex-none px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                        className="flex-1 md:flex-none py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                                     >
                                         {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <RotateCcw size={14}/>} 
                                         Reembolsar
@@ -497,7 +604,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                             </div>
 
                             {/* Mapa de Trayecto */}
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[250px]">
+                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[300px]">
                                 <div className="flex justify-between items-center mb-4">
                                     <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Trayecto Real</h4>
                                     {conn.liveLocation && (
@@ -507,17 +614,9 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                     )}
                                 </div>
 
-                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[200px]">
+                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[250px]">
                                     {googleApiKey ? (
-                                        <iframe
-                                            width="100%"
-                                            height="100%"
-                                            frameBorder="0"
-                                            style={{ border: 0 }}
-                                            src={mapUrl}
-                                            allowFullScreen
-                                            title="Ruta del Viaje"
-                                        ></iframe>
+                                        <div ref={mapRef} className="w-full h-full"></div>
                                     ) : (
                                         <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
                                             <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
@@ -532,7 +631,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-[400px] lg:h-auto">
                             <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                                 <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
-                                <p className="text-[10px] text-slate-500 font-medium mt-1">Modo auditoría. Acceso de solo lectura para soporte y resolución de disputas.</p>
+                                <p className="text-[10px] text-slate-500 font-medium mt-1">Los administradores tienen acceso de solo lectura para auditoría y resolución de disputas.</p>
                             </div>
                             
                             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-4">
