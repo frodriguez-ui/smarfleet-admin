@@ -8,7 +8,6 @@ import {
   Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle,
   DollarSign, HeartHandshake, Clock
 } from 'lucide-react';
-import { GoogleMap, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 import { initializeApp } from 'firebase/app';
@@ -33,8 +32,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
-
-const LIBRARIES = ['places'];
 
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
@@ -342,19 +339,12 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
     const [isLoadingChat, setIsLoadingChat] = useState(true);
-    const [directionsResponse, setDirectionsResponse] = useState(null);
 
     const post = [...trips, ...loads].find(p => p.id === conn.postId);
     const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
     const isFunded = conn.paymentStatus === 'funded';
 
-    // Cargar mapa de Google
     const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-    const { isLoaded } = useJsApiLoader({
-        id: 'google-map-script-admin',
-        googleMapsApiKey: googleApiKey,
-        libraries: LIBRARIES
-    });
 
     // Cargar historial de chat de esta conexión
     useEffect(() => {
@@ -370,24 +360,10 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => unsub();
     }, [conn.id]);
 
-    // Calcular Ruta en Google Maps si la publicación existe
-    useEffect(() => {
-        if (isLoaded && window.google && window.google.maps && post) {
-            const directionsService = new window.google.maps.DirectionsService();
-            const origin = post.exactOriginLocation || post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`;
-            const destination = post.exactDestinationLocation || post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`;
-
-            directionsService.route({
-                origin: origin,
-                destination: destination,
-                travelMode: window.google.maps.TravelMode.DRIVING,
-            }).then(results => {
-                if (results.status === 'OK') {
-                    setDirectionsResponse(results);
-                }
-            }).catch(e => console.warn("Ruta visual no disponible", e));
-        }
-    }, [isLoaded, post]);
+    // Calcular strings de origen y destino para el mapa en Iframe
+    const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
+    const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
+    const mapUrl = `https://www.google.com/maps/embed/v1/directions?key=${googleApiKey}&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destStr)}`;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
@@ -469,21 +445,24 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Logística y Ruta</h4>
                             
-                            {/* MAPA DE TRAYECTO VISUAL */}
+                            {/* MAPA DE TRAYECTO VISUAL CON IFRAME NATIVO (SIN LIBRERÍAS EXTERNAS) */}
                             <div className="h-40 md:h-48 w-full bg-slate-100 rounded-xl overflow-hidden relative mb-4 border border-slate-200">
-                                {isLoaded && directionsResponse ? (
-                                    <GoogleMap
-                                        mapContainerStyle={{ width: '100%', height: '100%' }}
-                                        center={{ lat: 23.6345, lng: -102.5528 }}
-                                        zoom={5}
-                                        options={{ disableDefaultUI: true }}
-                                    >
-                                        <DirectionsRenderer directions={directionsResponse} />
-                                    </GoogleMap>
+                                {googleApiKey && post ? (
+                                    <iframe
+                                        width="100%"
+                                        height="100%"
+                                        frameBorder="0"
+                                        style={{ border: 0 }}
+                                        src={mapUrl}
+                                        allowFullScreen
+                                        title="Ruta del Viaje"
+                                    ></iframe>
                                 ) : (
                                     <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
                                         <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest">Cargando mapa...</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest">
+                                            {!googleApiKey ? 'Falta API Key de Google Maps' : 'Cargando mapa...'}
+                                        </p>
                                     </div>
                                 )}
                             </div>
