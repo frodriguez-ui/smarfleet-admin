@@ -5,7 +5,8 @@ import {
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
   Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
-  Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle
+  Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle,
+  DollarSign, HeartHandshake // <-- ¡ICONOS FALTANTES AGREGADOS AQUÍ!
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
