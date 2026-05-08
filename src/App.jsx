@@ -8,6 +8,7 @@ import {
   Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle,
   DollarSign, HeartHandshake, Clock
 } from 'lucide-react';
+import { GoogleMap, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 import { initializeApp } from 'firebase/app';
@@ -32,6 +33,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
+
+const LIBRARIES = ['places'];
 
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
@@ -339,6 +342,19 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
     const [isLoadingChat, setIsLoadingChat] = useState(true);
+    const [directionsResponse, setDirectionsResponse] = useState(null);
+
+    const post = [...trips, ...loads].find(p => p.id === conn.postId);
+    const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
+    const isFunded = conn.paymentStatus === 'funded';
+
+    // Cargar mapa de Google
+    const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+    const { isLoaded } = useJsApiLoader({
+        id: 'google-map-script-admin',
+        googleMapsApiKey: googleApiKey,
+        libraries: LIBRARIES
+    });
 
     // Cargar historial de chat de esta conexión
     useEffect(() => {
@@ -354,9 +370,24 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => unsub();
     }, [conn.id]);
 
-    const post = [...trips, ...loads].find(p => p.id === conn.postId);
-    const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
-    const isFunded = conn.paymentStatus === 'funded';
+    // Calcular Ruta en Google Maps si la publicación existe
+    useEffect(() => {
+        if (isLoaded && window.google && window.google.maps && post) {
+            const directionsService = new window.google.maps.DirectionsService();
+            const origin = post.exactOriginLocation || post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`;
+            const destination = post.exactDestinationLocation || post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`;
+
+            directionsService.route({
+                origin: origin,
+                destination: destination,
+                travelMode: window.google.maps.TravelMode.DRIVING,
+            }).then(results => {
+                if (results.status === 'OK') {
+                    setDirectionsResponse(results);
+                }
+            }).catch(e => console.warn("Ruta visual no disponible", e));
+        }
+    }, [isLoaded, post]);
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
@@ -389,25 +420,25 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                             <div className="bg-red-50 border-2 border-red-200 p-5 rounded-2xl shadow-sm">
                                 <h3 className="font-black text-red-800 text-sm mb-3 flex items-center gap-1.5"><AlertTriangle size={16}/> Panel de Resolución de Disputa</h3>
                                 <p className="text-xs text-red-700 mb-2"><strong>Motivo reportado:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
-                                <p className="text-[10px] text-red-600 mb-4 uppercase tracking-widest">Abierta por: {conn.disputeDetails?.openedByName}</p>
+                                <p className="text-[10px] text-red-600 mb-3 uppercase tracking-widest">Abierta por: {conn.disputeDetails?.openedByName}</p>
                                 
                                 {isFunded ? (
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col sm:flex-row gap-2 mt-1">
                                         <button 
                                             disabled={resolvingDispute === conn.id}
                                             onClick={() => handleResolveDispute(conn, 'carrier')}
-                                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                            className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                                         >
-                                            {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <Truck size={16}/>} 
-                                            Resolver a favor de Transportista (Pagar)
+                                            {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <Truck size={14}/>} 
+                                            Liberar a Transp.
                                         </button>
                                         <button 
                                             disabled={resolvingDispute === conn.id}
                                             onClick={() => handleResolveDispute(conn, 'shipper')}
-                                            className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                            className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                                         >
-                                            {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <RotateCcw size={16}/>} 
-                                            Resolver a favor de Cliente (Reembolsar)
+                                            {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <RotateCcw size={14}/>} 
+                                            Reembolsar a Cliente
                                         </button>
                                     </div>
                                 ) : (
@@ -438,6 +469,25 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                             <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Logística y Ruta</h4>
                             
+                            {/* MAPA DE TRAYECTO VISUAL */}
+                            <div className="h-40 md:h-48 w-full bg-slate-100 rounded-xl overflow-hidden relative mb-4 border border-slate-200">
+                                {isLoaded && directionsResponse ? (
+                                    <GoogleMap
+                                        mapContainerStyle={{ width: '100%', height: '100%' }}
+                                        center={{ lat: 23.6345, lng: -102.5528 }}
+                                        zoom={5}
+                                        options={{ disableDefaultUI: true }}
+                                    >
+                                        <DirectionsRenderer directions={directionsResponse} />
+                                    </GoogleMap>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
+                                        <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest">Cargando mapa...</p>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="flex items-center gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[10px] font-bold text-blue-600 uppercase">Origen</p>
@@ -1549,36 +1599,10 @@ const AdminDashboard = () => {
                                             <button onClick={() => setViewingConnection(conn)} className="px-4 py-2 border text-xs font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 bg-white border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50">
                                                 <Eye size={14}/> Ver Detalles y Chat
                                             </button>
-                                         
-                                            {/* BOTONES ADMINISTRATIVOS DE RESOLUCIÓN DE DISPUTAS */}
-                                            {isDisputed && conn.paymentStatus === 'funded' && (
-                                             <>
-                                                 <button 
-                                                     disabled={resolvingDispute === conn.id}
-                                                     onClick={() => handleResolveDispute(conn, 'carrier')}
-                                                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                                 >
-                                                     {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <Truck size={12}/>} 
-                                                     Liberar a Transportista
-                                                 </button>
-                                                 <button 
-                                                     disabled={resolvingDispute === conn.id}
-                                                     onClick={() => handleResolveDispute(conn, 'shipper')}
-                                                     className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                                 >
-                                                     {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <RotateCcw size={12}/>} 
-                                                     Reembolsar a Cliente
-                                                 </button>
-                                             </>
-                                            )}
                                          </div>
                                      </td>
                                  </tr>
-                             )}) : (
-                                <tr>
-                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
-                                </tr>
-                             )}
+                             )})}
                          </tbody>
                      </table>
                  </div>
