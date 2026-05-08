@@ -1602,7 +1602,12 @@ const AdminDashboard = () => {
                                          </div>
                                      </td>
                                  </tr>
-                             )})}
+                                 );
+                             }) : (
+                                <tr>
+                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
+                                </tr>
+                             )}
                          </tbody>
                      </table>
                  </div>
