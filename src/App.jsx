@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
-  Shield, Users, Truck, Package, LogOut, 
+  Shield, Users, User as UserIcon, Truck, Package, LogOut, 
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
   Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
@@ -1574,11 +1574,7 @@ const AdminDashboard = () => {
                                          </div>
                                      </td>
                                  </tr>
-                             )}) : (
-                                <tr>
-                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
-                                </tr>
-                             )}
+                             )})}
                          </tbody>
                      </table>
                  </div>
