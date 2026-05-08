@@ -6,7 +6,7 @@ import {
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
   Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
   Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle,
-  DollarSign, HeartHandshake // <-- ¡ICONOS FALTANTES AGREGADOS AQUÍ!
+  DollarSign, HeartHandshake, Clock
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -32,6 +32,24 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
+
+// ============================================================================
+// --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
+// ============================================================================
+const safeDateStr = (ts) => {
+    if (!ts) return 'N/A';
+    const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+    if (isNaN(d.getTime())) return 'N/A';
+    return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const formatMessageTime = (ts) => {
+    if (!ts) return '...';
+    const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+    if (isNaN(d.getTime())) return '...';
+    return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+};
+
 
 // ============================================================================
 // --- COMPONENTE AUXILIAR (PAGINACIÓN) ---
@@ -320,18 +338,25 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
 // 3. MODAL DE DETALLE DE CONEXIÓN Y CHAT (EXCLUSIVO ADMIN)
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
+    const [isLoadingChat, setIsLoadingChat] = useState(true);
 
     // Cargar historial de chat de esta conexión
     useEffect(() => {
+        setIsLoadingChat(true);
         const q = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages'), orderBy('timestamp', 'asc'));
         const unsub = onSnapshot(q, snap => {
             setMessages(snap.docs.map(d => ({id: d.id, ...d.data()})));
+            setIsLoadingChat(false);
+        }, (err) => {
+            console.error("Error cargando chat:", err);
+            setIsLoadingChat(false);
         });
         return () => unsub();
     }, [conn.id]);
 
     const post = [...trips, ...loads].find(p => p.id === conn.postId);
-    const isDisputed = conn.isDisputed && conn.paymentStatus === 'funded';
+    const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
+    const isFunded = conn.paymentStatus === 'funded';
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
@@ -340,12 +365,12 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                 {/* Cabecera del Detalle */}
                 <div className="bg-white px-6 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${conn.isDisputed ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-600'}`}>
-                            {conn.isDisputed ? <AlertTriangle size={24}/> : <LinkIcon size={24}/>}
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isDisputed ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-600'}`}>
+                            {isDisputed ? <AlertTriangle size={24}/> : <LinkIcon size={24}/>}
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-slate-800 leading-none flex items-center gap-2">
-                                Detalles de la Operación {conn.isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest">En Disputa</span>}
+                                Detalles de la Operación {isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest">En Disputa</span>}
                             </h2>
                             <p className="text-xs text-slate-500 font-mono mt-1">ID: {conn.id}</p>
                         </div>
@@ -362,28 +387,34 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         {/* 🚨 Panel de Disputa (Si aplica) */}
                         {isDisputed && (
                             <div className="bg-red-50 border-2 border-red-200 p-5 rounded-2xl shadow-sm">
-                                <h3 className="font-black text-red-800 text-sm mb-3 flex items-center gap-1.5"><AlertTriangle size={16}/> Acciones de Resolución (Mallete del Juez)</h3>
-                                <p className="text-xs text-red-700 mb-2"><strong>Motivo del usuario:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
+                                <h3 className="font-black text-red-800 text-sm mb-3 flex items-center gap-1.5"><AlertTriangle size={16}/> Panel de Resolución de Disputa</h3>
+                                <p className="text-xs text-red-700 mb-2"><strong>Motivo reportado:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
                                 <p className="text-[10px] text-red-600 mb-4 uppercase tracking-widest">Abierta por: {conn.disputeDetails?.openedByName}</p>
                                 
-                                <div className="flex flex-col gap-2">
-                                    <button 
-                                        disabled={resolvingDispute === conn.id}
-                                        onClick={() => handleResolveDispute(conn, 'carrier')}
-                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                    >
-                                        {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <Truck size={16}/>} 
-                                        Resolver a favor de Transportista (Pagar)
-                                    </button>
-                                    <button 
-                                        disabled={resolvingDispute === conn.id}
-                                        onClick={() => handleResolveDispute(conn, 'shipper')}
-                                        className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                                    >
-                                        {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <RotateCcw size={16}/>} 
-                                        Resolver a favor de Cliente (Reembolsar)
-                                    </button>
-                                </div>
+                                {isFunded ? (
+                                    <div className="flex flex-col gap-2">
+                                        <button 
+                                            disabled={resolvingDispute === conn.id}
+                                            onClick={() => handleResolveDispute(conn, 'carrier')}
+                                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <Truck size={16}/>} 
+                                            Resolver a favor de Transportista (Pagar)
+                                        </button>
+                                        <button 
+                                            disabled={resolvingDispute === conn.id}
+                                            onClick={() => handleResolveDispute(conn, 'shipper')}
+                                            className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <RotateCcw size={16}/>} 
+                                            Resolver a favor de Cliente (Reembolsar)
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white/50 p-3 rounded-xl border border-red-100 text-center">
+                                        <p className="text-[10px] font-bold text-red-600">Este viaje no utilizó Pago Seguro. Comunícate con las partes para mediar el conflicto externo.</p>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -410,19 +441,23 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                             <div className="flex items-center gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
                                 <div className="min-w-0 flex-1">
                                     <p className="text-[10px] font-bold text-blue-600 uppercase">Origen</p>
-                                    <p className="font-bold text-slate-800 text-sm truncate">{post?.originCity || 'Desconocido'}</p>
+                                    <p className="font-bold text-slate-800 text-sm truncate" title={post?.originCity}>{post ? post.originCity : 'Publicación Eliminada'}</p>
                                 </div>
                                 <ArrowRight size={16} className="text-slate-300 shrink-0"/>
                                 <div className="min-w-0 flex-1 text-right">
                                     <p className="text-[10px] font-bold text-emerald-600 uppercase">Destino</p>
-                                    <p className="font-bold text-slate-800 text-sm truncate">{post?.destinationCity || 'Desconocido'}</p>
+                                    <p className="font-bold text-slate-800 text-sm truncate" title={post?.destinationCity}>{post ? post.destinationCity : 'Publicación Eliminada'}</p>
                                 </div>
                             </div>
 
                             <div className="space-y-3">
                                 <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase">Estatus Actual</p>
-                                    <p className="text-sm font-black text-slate-700">{conn.currentTrackingStatus ? conn.currentTrackingStatus.replace(/_/g, ' ').toUpperCase() : 'AÚN NO INICIA'}</p>
+                                    <p className="text-sm font-black text-slate-700">
+                                        {conn.currentTrackingStatus 
+                                            ? String(conn.currentTrackingStatus).replace(/_/g, ' ').toUpperCase() 
+                                            : (conn.tripStatus ? String(conn.tripStatus).toUpperCase() : 'AÚN NO INICIA')}
+                                    </p>
                                 </div>
                                 {conn.assignedVehicle && (
                                     <div className="pt-3 border-t border-slate-100">
@@ -444,7 +479,12 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                         
                         <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-4">
-                            {messages.length === 0 ? (
+                            {isLoadingChat ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <Activity size={32} className="mb-2 opacity-50 animate-spin"/>
+                                    <p className="text-xs font-bold">Cargando conversación...</p>
+                                </div>
+                            ) : messages.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                                     <MessageCircle size={32} className="mb-2 opacity-50"/>
                                     <p className="text-xs font-bold">No hay mensajes registrados</p>
@@ -460,7 +500,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                             <div className={`p-3 rounded-2xl text-xs font-medium shadow-sm max-w-[85%] ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm' : 'bg-blue-600 text-white rounded-tr-sm'}`}>
                                                 {m.text}
                                             </div>
-                                            <span className="text-[8px] text-slate-400 mt-1 px-1">{m.timestamp ? new Date(m.timestamp.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '...'}</span>
+                                            <span className="text-[8px] text-slate-400 mt-1 px-1">{formatMessageTime(m.timestamp)}</span>
                                         </div>
                                     )
                                 })
@@ -1398,6 +1438,7 @@ const AdminDashboard = () => {
                                      </td>
                                      <td className="p-5">
                                          <p className="font-bold text-slate-800 text-xs flex items-center gap-1"><Calendar size={12} className="text-blue-500"/> {pub.date || 'Fija'}</p>
+                                         <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1 mt-1"><Clock size={10}/> Creado: {safeDateStr(pub.createdAt)}</p>
                                          <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold border ${pub.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : pub.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
                                             {pub.status === 'active' ? 'ACTIVA' : pub.status.toUpperCase()}
                                          </span>
@@ -1468,30 +1509,36 @@ const AdminDashboard = () => {
                              </tr>
                          </thead>
                          <tbody className="divide-y divide-slate-100">
-                             {pagedConns.length > 0 ? pagedConns.map(conn => (
-                                 <tr key={conn.id} className={`transition-colors ${conn.isDisputed ? 'bg-red-50/30' : 'hover:bg-slate-50/50'}`}>
+                             {pagedConns.length > 0 ? pagedConns.map(conn => {
+                                 const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
+                                 
+                                 return (
+                                 <tr key={conn.id} className={`transition-colors ${isDisputed ? 'bg-red-50/30' : 'hover:bg-slate-50/50'}`}>
                                      <td className="p-5">
                                          <p className="text-xs font-bold text-blue-600 mb-1.5 flex items-center gap-1.5"><MapPin size={12}/> De: <span className="text-slate-800">{conn.fromName}</span></p>
                                          <p className="text-xs font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle size={12}/> Para: <span className="text-slate-800">{conn.toName}</span></p>
-                                         <p className="text-[9px] text-slate-400 font-mono mt-2">Ref: {conn.id.substring(0,8)}</p>
+                                         <div className="flex flex-wrap items-center gap-2 mt-2">
+                                            <span className="text-[9px] text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">Ref: {conn.id.substring(0,8)}</span>
+                                            <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100"><Clock size={10}/> {safeDateStr(conn.createdAt)}</span>
+                                         </div>
                                      </td>
                                      <td className="p-5">
-                                         {conn.isDisputed ? (
+                                         {isDisputed ? (
                                              <span className="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border bg-red-100 text-red-700 border-red-200 flex items-center gap-1 w-max">
                                                  <AlertTriangle size={12}/> EN DISPUTA
                                              </span>
                                          ) : (
                                              <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${conn.tripStatus === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-200' : conn.tripStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                                                {conn.tripStatus ? conn.tripStatus : (conn.status === 'accepted' ? 'ACEPTADA' : 'PENDIENTE')}
+                                                {conn.tripStatus ? conn.tripStatus.toUpperCase() : (conn.status === 'accepted' ? 'ACEPTADA' : 'PENDIENTE')}
                                              </span>
                                          )}
                                          {conn.paymentStatus === 'funded' && <p className="text-[9px] font-black text-indigo-600 mt-2 flex items-center gap-1"><ShieldCheck size={10}/> PAGO SEGURO RETENIDO</p>}
                                      </td>
                                      <td className="p-5">
-                                         {conn.isDisputed ? (
+                                         {isDisputed ? (
                                              <div className="text-xs">
                                                  <p className="font-bold text-red-800 mb-1">Motivo: <span className="font-medium text-red-600">{conn.disputeDetails?.reason || 'No especificado'}</span></p>
-                                                 <p className="text-[9px] text-red-500">Abierta por: {conn.disputeDetails?.openedByName}</p>
+                                                 <p className="text-[9px] text-red-500">Abierta por: {conn.disputeDetails?.openedByName || 'Usuario'}</p>
                                              </div>
                                          ) : (
                                              <span className="text-xs font-medium text-slate-400">Sin incidencias</span>
@@ -1504,7 +1551,7 @@ const AdminDashboard = () => {
                                             </button>
                                          
                                             {/* BOTONES ADMINISTRATIVOS DE RESOLUCIÓN DE DISPUTAS */}
-                                            {conn.isDisputed && conn.paymentStatus === 'funded' && (
+                                            {isDisputed && conn.paymentStatus === 'funded' && (
                                              <>
                                                  <button 
                                                      disabled={resolvingDispute === conn.id}
@@ -1527,11 +1574,7 @@ const AdminDashboard = () => {
                                          </div>
                                      </td>
                                  </tr>
-                             )) : (
-                                <tr>
-                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
-                                </tr>
-                             )}
+                             )})}
                          </tbody>
                      </table>
                  </div>
