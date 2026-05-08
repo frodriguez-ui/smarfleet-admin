@@ -13,7 +13,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { 
   getFirestore, collectionGroup, collection, query, onSnapshot, 
-  doc, getDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp
+  doc, getDoc, updateDoc, setDoc, deleteDoc, writeBatch, serverTimestamp, orderBy
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -164,150 +164,154 @@ const EditUserModal = ({ user, onClose }) => {
     );
 };
 
-// 2. MODAL DE DETALLE (DRILL-DOWN)
-const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) => {
-    const userPubs = useMemo(() => {
-        return [...allTrips, ...allLoads]
-            .filter(p => p.userId === user.id)
-            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-    }, [allTrips, allLoads, user.id]);
+// 3. MODAL DE DETALLE DE CONEXIÓN Y CHAT (EXCLUSIVO ADMIN)
+const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
+    const [messages, setMessages] = useState([]);
 
-    const userConns = useMemo(() => {
-        return allConnections
-            .filter(c => c.participants && c.participants.includes(user.id))
-            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-    }, [allConnections, user.id]);
+    // Cargar historial de chat de esta conexión
+    useEffect(() => {
+        const q = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages'), orderBy('timestamp', 'asc'));
+        const unsub = onSnapshot(q, snap => {
+            setMessages(snap.docs.map(d => ({id: d.id, ...d.data()})));
+        });
+        return () => unsub();
+    }, [conn.id]);
 
-    const stats = {
-        activePubs: userPubs.filter(p => p.status === 'active').length,
-        totalPubs: userPubs.length,
-        completedTrips: userConns.filter(c => c.tripStatus === 'completed').length,
-        totalConns: userConns.length
-    };
-
-    // Extraer fecha de vencimiento
-    const expDate = user.subscriptionEndsAt?.seconds 
-        ? new Date(user.subscriptionEndsAt.seconds * 1000).toLocaleDateString() 
-        : (user.currentPeriodEnd?.seconds ? new Date(user.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
+    const post = [...trips, ...loads].find(p => p.id === conn.postId);
+    const isDisputed = conn.isDisputed && conn.paymentStatus === 'funded';
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
-            <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-50 rounded-[2rem] w-full max-w-4xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
                 
                 {/* Cabecera del Detalle */}
-                <div className="bg-white px-8 py-6 border-b border-slate-200 flex justify-between items-start shrink-0">
-                    <div className="flex gap-5 items-center">
-                        <div className="w-16 h-16 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shrink-0 shadow-sm">
-                            {user.photoData ? <img src={user.photoData} alt="Logo" className="w-full h-full object-cover" /> : <Users size={28}/>}
+                <div className="bg-white px-6 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${conn.isDisputed ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-600'}`}>
+                            {conn.isDisputed ? <AlertTriangle size={24}/> : <LinkIcon size={24}/>}
                         </div>
                         <div>
-                            <div className="flex items-center gap-3 mb-1">
-                                <h2 className="text-2xl font-black text-slate-800 leading-none">{user.businessName || 'Usuario sin nombre'}</h2>
-                                {user.isSuspended && <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Ban size={10}/> Suspendido</span>}
-                                {user.isAdmin && <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Shield size={10}/> Admin</span>}
-                            </div>
-                            <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-500 mt-2">
-                                <span className="flex items-center gap-1.5"><Mail size={14}/> {user.email || user.id}</span>
-                                {user.phone && <span className="flex items-center gap-1.5"><Phone size={14}/> {user.phone}</span>}
-                                <span className={`px-2 py-0.5 rounded-md font-bold uppercase tracking-wider text-[9px] border ${user.role === 'carrier' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
-                                    {user.role === 'carrier' ? 'Transportista' : 'Generador'}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] border ${user.tier === 'premium' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                    {user.tier === 'premium' ? `PREMIUM (Vence: ${expDate})` : 'FREE'}
-                                </span>
-                            </div>
+                            <h2 className="text-xl font-black text-slate-800 leading-none flex items-center gap-2">
+                                Detalles de la Operación {conn.isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest">En Disputa</span>}
+                            </h2>
+                            <p className="text-xs text-slate-500 font-mono mt-1">ID: {conn.id}</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
-                {/* Contenido Scrolleable */}
-                <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
+                {/* Contenido (Doble Columna en Desktop) */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col lg:flex-row gap-6">
                     
-                    {/* Tarjetas de Métricas */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Package size={12}/> Pub. Activas</p>
-                            <p className="text-3xl font-black text-slate-800">{stats.activePubs}</p>
+                    {/* Columna Izquierda: Info de Logística, Acuerdo y Disputa */}
+                    <div className="w-full lg:w-1/2 space-y-4">
+                        
+                        {/* 🚨 Panel de Disputa (Si aplica) */}
+                        {isDisputed && (
+                            <div className="bg-red-50 border-2 border-red-200 p-5 rounded-2xl shadow-sm">
+                                <h3 className="font-black text-red-800 text-sm mb-3 flex items-center gap-1.5"><AlertTriangle size={16}/> Acciones de Resolución (Mallete del Juez)</h3>
+                                <p className="text-xs text-red-700 mb-2"><strong>Motivo del usuario:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
+                                <p className="text-[10px] text-red-600 mb-4 uppercase tracking-widest">Abierta por: {conn.disputeDetails?.openedByName}</p>
+                                
+                                <div className="flex flex-col gap-2">
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'carrier')}
+                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <Truck size={16}/>} 
+                                        Resolver a favor de Transportista (Pagar)
+                                    </button>
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'shipper')}
+                                        className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <RotateCcw size={16}/>} 
+                                        Resolver a favor de Cliente (Reembolsar)
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
+                            <div className="flex justify-between items-end mb-3">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Monto Acordado</p>
+                                    <p className="text-2xl font-black text-slate-800">${Number(conn.proposalAmount || 0).toLocaleString()} MXN</p>
+                                </div>
+                                <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${conn.paymentStatus === 'funded' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
+                                    {conn.paymentStatus === 'funded' ? 'Pago Seguro Retenido' : conn.paymentStatus || 'Pendiente'}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
+                                <span className="font-bold text-slate-600">Vía:</span> 
+                                {conn.proposalEscrow ? <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded flex items-center gap-1"><ShieldCheck size={12}/> Stripe (Seguro)</span> : <span className="text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1"><HeartHandshake size={12}/> Por fuera</span>}
+                            </div>
                         </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><FileText size={12}/> Pub. Totales</p>
-                            <p className="text-3xl font-black text-slate-800">{stats.totalPubs}</p>
+
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Logística y Ruta</h4>
+                            
+                            <div className="flex items-center gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-bold text-blue-600 uppercase">Origen</p>
+                                    <p className="font-bold text-slate-800 text-sm truncate">{post?.originCity || 'Desconocido'}</p>
+                                </div>
+                                <ArrowRight size={16} className="text-slate-300 shrink-0"/>
+                                <div className="min-w-0 flex-1 text-right">
+                                    <p className="text-[10px] font-bold text-emerald-600 uppercase">Destino</p>
+                                    <p className="font-bold text-slate-800 text-sm truncate">{post?.destinationCity || 'Desconocido'}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Estatus Actual</p>
+                                    <p className="text-sm font-black text-slate-700">{conn.currentTrackingStatus ? conn.currentTrackingStatus.replace(/_/g, ' ').toUpperCase() : 'AÚN NO INICIA'}</p>
+                                </div>
+                                {conn.assignedVehicle && (
+                                    <div className="pt-3 border-t border-slate-100">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Unidad y Operador Asignados</p>
+                                        <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Truck size={12} className="text-blue-500"/> {conn.assignedVehicle.model} ({conn.assignedVehicle.plates})</p>
+                                        <p className="text-xs font-medium text-slate-600 flex items-center gap-1.5 mt-1"><UserIcon size={12} className="text-slate-400"/> {conn.assignedDriver?.name} - {conn.assignedDriver?.phone}</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><LinkIcon size={12}/> Interacciones</p>
-                            <p className="text-3xl font-black text-slate-800">{stats.totalConns}</p>
-                        </div>
-                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center gap-1"><CheckCircle size={12}/> Viajes Exitosos</p>
-                            <p className="text-3xl font-black text-emerald-700">{stats.completedTrips}</p>
-                        </div>
+
                     </div>
 
-                    <div className="grid lg:grid-cols-2 gap-8">
-                        {/* Lista de Publicaciones */}
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                                    <Package size={16} className="text-blue-500"/> Historial de Publicaciones
-                                </h3>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/30">
-                                {userPubs.length > 0 ? userPubs.map(pub => (
-                                    <div key={pub.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm text-sm flex justify-between items-center gap-3">
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-slate-700 truncate flex items-center gap-1.5">
-                                                {pub.originCity} <ArrowRight size={12} className="text-slate-300"/> {pub.destinationCity}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                                                <span className="font-mono bg-slate-100 px-1 rounded">{pub.customId || pub.id.substring(0,6)}</span>
-                                                <span>•</span>
-                                                <span className="flex items-center gap-1"><Calendar size={10}/> {pub.date || 'Fija'}</span>
-                                            </div>
-                                        </div>
-                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 ${pub.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : pub.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                                            {pub.status.toUpperCase()}
-                                        </span>
-                                    </div>
-                                )) : (
-                                    <p className="text-center text-slate-400 text-xs py-10 font-medium">No tiene publicaciones.</p>
-                                )}
-                            </div>
+                    {/* Columna Derecha: CHAT EN VIVO */}
+                    <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-[400px] lg:h-auto">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                            <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
+                            <p className="text-[10px] text-slate-500 font-medium mt-1">Los administradores tienen acceso de solo lectura para auditoría y resolución de disputas.</p>
                         </div>
-
-                        {/* Lista de Conexiones */}
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                                    <LinkIcon size={16} className="text-purple-500"/> Interacciones en la Red
-                                </h3>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/30">
-                                {userConns.length > 0 ? userConns.map(conn => {
-                                    const otherName = conn.fromUid === user.id ? conn.toName : conn.fromName;
-                                    const isSender = conn.fromUid === user.id;
-                                    const targetStatus = conn.tripStatus || conn.status;
-                                    
+                        
+                        <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-4">
+                            {messages.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <MessageCircle size={32} className="mb-2 opacity-50"/>
+                                    <p className="text-xs font-bold">No hay mensajes registrados</p>
+                                </div>
+                            ) : (
+                                messages.map(m => {
+                                    const isFromShipper = m.senderId === conn.fromUid;
                                     return (
-                                    <div key={conn.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm text-sm flex justify-between items-center gap-3">
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-slate-700 truncate">
-                                                Con: <span className="text-blue-600">{otherName}</span>
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                                                <span>{isSender ? 'Solicitó contactar' : 'Recibió solicitud'}</span>
-                                                <span>•</span>
-                                                <span className="font-mono">{new Date(conn.createdAt?.seconds * 1000 || Date.now()).toLocaleDateString()}</span>
+                                        <div key={m.id} className={`flex flex-col w-full ${isFromShipper ? 'items-start' : 'items-end'}`}>
+                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
+                                                {isFromShipper ? conn.fromName : conn.toName}
+                                            </span>
+                                            <div className={`p-3 rounded-2xl text-xs font-medium shadow-sm max-w-[85%] ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm' : 'bg-blue-600 text-white rounded-tr-sm'}`}>
+                                                {m.text}
                                             </div>
+                                            <span className="text-[8px] text-slate-400 mt-1 px-1">{m.timestamp ? new Date(m.timestamp.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '...'}</span>
                                         </div>
-                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 ${targetStatus === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : targetStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                                            {targetStatus.toUpperCase()}
-                                        </span>
-                                    </div>
-                                )}) : (
-                                    <p className="text-center text-slate-400 text-xs py-10 font-medium">No tiene interacciones registradas.</p>
-                                )}
-                            </div>
+                                    )
+                                })
+                            )}
                         </div>
                     </div>
                 </div>
@@ -317,7 +321,7 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
 };
 
 // ============================================================================
-// --- COMPONENTE: LOGIN ---
+// --- COMPONENTE: LOGIN DEL ADMIN ---
 // ============================================================================
 const AdminLogin = () => {
   const navigate = useNavigate();
@@ -344,14 +348,14 @@ const AdminLogin = () => {
              const data = profileSnap.data();
              
              if (data.isAdmin === true || String(data.isAdmin).toLowerCase() === "true") {
-                 navigate('/dashboard');
+                 // Éxito, el componente App redirigirá automáticamente
              } else {
                  await signOut(auth);
                  let errorMsg = `Acceso denegado. `;
                  if (data.isAdmin === undefined) {
                      errorMsg += `El campo 'isAdmin' NO EXISTE en tu documento. Asegúrate de agregarlo como booleano (true) en: ${docPath}`;
                  } else {
-                     errorMsg += `El campo 'isAdmin' existe, pero su valor es: "${data.isAdmin}" (tipo: ${typeof data.isAdmin}). Debe ser true (Booleano).`;
+                     errorMsg += `El campo 'isAdmin' existe, pero su valor es: "${data.isAdmin}". Debe ser true (Booleano).`;
                  }
                  setError(errorMsg);
              }
@@ -362,11 +366,11 @@ const AdminLogin = () => {
       } catch (docError) {
           console.error("Error al intentar leer el perfil:", docError);
           await signOut(auth);
-          setError(`Error de Firestore al leer tu perfil: ${docError.message}. Verifica las reglas de seguridad o tu conexión.`);
+          setError(`Error de Firestore al leer tu perfil: ${docError.message}. Verifica las reglas de seguridad.`);
       }
     } catch (err) {
       console.error("Error de login (Authentication):", err);
-      setError("Credenciales incorrectas o usuario no encontrado en Firebase Authentication.");
+      setError("Credenciales incorrectas o usuario no encontrado en Firebase.");
     } finally {
       setLoading(false);
     }
@@ -410,6 +414,7 @@ const AdminDashboard = () => {
   // Estados para Modales
   const [editingUser, setEditingUser] = useState(null);
   const [viewingUser, setViewingUser] = useState(null);
+  const [viewingConnection, setViewingConnection] = useState(null); // <-- NUEVO ESTADO PARA DETALLE DE CONEXIÓN
   
   // Estado para capturar errores de índices o permisos
   const [dbError, setDbError] = useState(null);
@@ -496,7 +501,7 @@ const AdminDashboard = () => {
       setResolvingDispute(conn.id);
       try {
           const resolveDisputeFn = httpsCallable(functions, 'resolveDisputeAdmin');
-          await resolveDisputeFn({ connectionId: conn.id, winner: winner, appId: projectId });
+          await resolveDisputeFn({ connectionId: conn.id, winnerRole: winner, adminNotes: 'Resuelto manualmente', appId: projectId });
           alert("¡Disputa resuelta y fondos movidos exitosamente!");
       } catch (error) {
           console.error(error);
@@ -614,7 +619,7 @@ const AdminDashboard = () => {
               c.id.toLowerCase().includes(searchLower);
           
           let targetStatus = c.tripStatus || c.status;
-          if (c.isDisputed === true || c.tripStatus === 'disputed') targetStatus = 'disputed'; // Forzamos el status a "disputed" para el filtro
+          if (c.isDisputed === true || c.tripStatus === 'disputed') targetStatus = 'disputed'; 
 
           const matchesStatus = connsFilter.status === 'all' || targetStatus === connsFilter.status;
 
@@ -653,7 +658,7 @@ const AdminDashboard = () => {
       // Función auxiliar para extraer fecha segura
       const getSafeDate = (item) => {
           if (item.createdAt?.seconds) return new Date(item.createdAt.seconds * 1000);
-          return new Date(); // Fallback temporal para datos legacy sin fecha
+          return new Date(); 
       };
 
       let maxUsersCategory = 1;
@@ -706,6 +711,7 @@ const AdminDashboard = () => {
       {/* MODALES EN CAPAS SUPERIORES */}
       {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />}
       {viewingUser && <UserDetailModal user={viewingUser} onClose={() => setViewingUser(null)} allTrips={trips} allLoads={loads} allConnections={connections} />}
+      {viewingConnection && <ConnectionDetailModal conn={viewingConnection} onClose={() => setViewingConnection(null)} trips={trips} loads={loads} handleResolveDispute={handleResolveDispute} resolvingDispute={resolvingDispute} />}
 
       {/* --- MENÚ LATERAL --- */}
       <aside className="w-64 bg-slate-900 text-white fixed h-full flex flex-col p-6 z-20 shadow-2xl">
@@ -1339,9 +1345,14 @@ const AdminDashboard = () => {
                                          )}
                                      </td>
                                      <td className="p-5 text-right">
-                                         {/* BOTONES ADMINISTRATIVOS DE RESOLUCIÓN DE DISPUTAS */}
-                                         {conn.isDisputed && conn.paymentStatus === 'funded' ? (
-                                             <div className="flex flex-col gap-2 w-max ml-auto">
+                                         <div className="flex flex-col gap-2 w-max ml-auto">
+                                            <button onClick={() => setViewingConnection(conn)} className="px-4 py-2 border text-xs font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 bg-white border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50">
+                                                <Eye size={14}/> Ver Detalles y Chat
+                                            </button>
+                                         
+                                            {/* BOTONES ADMINISTRATIVOS DE RESOLUCIÓN DE DISPUTAS */}
+                                            {conn.isDisputed && conn.paymentStatus === 'funded' && (
+                                             <>
                                                  <button 
                                                      disabled={resolvingDispute === conn.id}
                                                      onClick={() => handleResolveDispute(conn, 'carrier')}
@@ -1358,10 +1369,9 @@ const AdminDashboard = () => {
                                                      {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <RotateCcw size={12}/>} 
                                                      Reembolsar a Cliente
                                                  </button>
-                                             </div>
-                                         ) : (
-                                             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Sin Acciones</span>
-                                         )}
+                                             </>
+                                            )}
+                                         </div>
                                      </td>
                                  </tr>
                              )) : (
