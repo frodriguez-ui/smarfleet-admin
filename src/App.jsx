@@ -360,33 +360,36 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => unsub();
     }, [conn.id]);
 
-    // Calcular strings para el mapa en Iframe (Ruta vs GPS en Vivo)
+    // Calcular strings para el mapa en Iframe (Ruta Real con Waypoints)
     let mapUrl = "";
-    if (conn.liveLocation) {
-        // Mostrar ubicación GPS real registrada
-        mapUrl = `https://www.google.com/maps/embed/v1/place?key=${googleApiKey}&q=${conn.liveLocation.lat},${conn.liveLocation.lng}&zoom=14`;
-    } else {
-        // Mostrar ruta planeada
-        const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
-        const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
-        mapUrl = `https://www.google.com/maps/embed/v1/directions?key=${googleApiKey}&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destStr)}`;
+    const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
+    const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
+    
+    mapUrl = `https://www.google.com/maps/embed/v1/directions?key=${googleApiKey}&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destStr)}`;
+    // Si hay una ubicación en vivo, forzamos a que la ruta pase por ahí (Waypoint) para ver el trayecto real
+    if (conn.liveLocation && conn.liveLocation.lat && conn.liveLocation.lng) {
+        mapUrl += `&waypoints=${conn.liveLocation.lat},${conn.liveLocation.lng}`;
     }
 
-    // Extraer y procesar Hoja de Ruta
+    // Extraer y procesar Hoja de Ruta para el Top Banner (Horizontal)
     const tl = conn.timeline || {};
     const trackingSteps = [
-        { label: "Viaje Creado", time: conn.createdAt, icon: FileText, color: "slate" },
-        { label: "Acuerdo & Asignación", time: tl.assigned || tl.confirmed, icon: CheckCircle, color: "blue" },
-        { label: "En Ruta al Origen", time: tl.en_ruta_origen || tl.en_ruta_a_origen, icon: Truck, color: "amber" },
-        { label: "Cargando", time: tl.cargando, icon: Package, color: "amber" },
-        { label: "En Tránsito", time: tl.en_transito, icon: Activity, color: "blue" },
-        { label: "Entregado", time: tl.entregado || tl.delivered, icon: MapPin, color: "emerald" },
-        { label: "Finalizado", time: tl.completed || tl.terminated, icon: ShieldCheck, color: "purple" }
+        { id: 'created', label: "Creado", time: conn.createdAt, icon: FileText },
+        { id: 'assigned', label: "Asignado", time: tl.assigned || tl.confirmed, icon: CheckCircle },
+        { id: 'loading', label: "Cargando", time: tl.cargando || tl.en_ruta_origen || tl.en_ruta_a_origen, icon: Package },
+        { id: 'transit', label: "En Tránsito", time: tl.en_transito, icon: Activity },
+        { id: 'delivered', label: "Entregado", time: tl.entregado || tl.delivered, icon: MapPin },
+        { id: 'completed', label: "Finalizado", time: tl.completed || tl.terminated, icon: ShieldCheck }
     ];
+
+    // Calcular en qué paso vamos para la barra de progreso
+    let currentStepIndex = 0;
+    trackingSteps.forEach((s, i) => { if (s.time) currentStepIndex = i; });
+    const progressPercentage = trackingSteps.length > 1 ? (currentStepIndex / (trackingSteps.length - 1)) * 100 : 0;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
-            <div className="bg-slate-50 rounded-[2rem] w-full max-w-4xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
                 
                 {/* Cabecera del Detalle */}
                 <div className="bg-white px-6 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center shrink-0">
@@ -404,165 +407,164 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                     <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
-                {/* Contenido (Doble Columna en Desktop) */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col lg:flex-row gap-6">
+                {/* Contenido Principal con Scroll */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col gap-5">
                     
-                    {/* Columna Izquierda: Info de Logística, Acuerdo y Disputa */}
-                    <div className="w-full lg:w-1/2 space-y-4">
-                        
-                        {/* 🚨 Panel de Disputa (Si aplica) */}
-                        {isDisputed && (
-                            <div className="bg-red-50 border border-red-200 p-4 rounded-2xl shadow-sm">
-                                <h3 className="font-black text-red-800 text-sm mb-2 flex items-center gap-1.5"><AlertTriangle size={16}/> Panel de Resolución</h3>
-                                <p className="text-[11px] text-red-700 mb-1.5"><strong>Motivo:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
-                                <p className="text-[9px] text-red-600 mb-3 uppercase tracking-widest">Abierta por: {conn.disputeDetails?.openedByName}</p>
-                                
-                                {isFunded ? (
-                                    <div className="flex flex-row gap-2 mt-1">
-                                        <button 
-                                            disabled={resolvingDispute === conn.id}
-                                            onClick={() => handleResolveDispute(conn, 'carrier')}
-                                            className="flex-1 py-2 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50"
-                                        >
-                                            {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <Truck size={12}/>} 
-                                            Pagar a Transp.
-                                        </button>
-                                        <button 
-                                            disabled={resolvingDispute === conn.id}
-                                            onClick={() => handleResolveDispute(conn, 'shipper')}
-                                            className="flex-1 py-2 px-2 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50"
-                                        >
-                                            {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <RotateCcw size={12}/>} 
-                                            Reembolsar
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="bg-white/50 p-2 rounded-lg border border-red-100 text-center">
-                                        <p className="text-[9px] font-bold text-red-600">Este viaje no utilizó Pago Seguro. Comunícate con las partes para mediar.</p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                    {/* 1. TOP BANNER: HOJA DE RUTA HORIZONTAL (ESTILO PAQUETERÍA) */}
+                    <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto hide-scrollbar shrink-0">
+                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Truck size={14}/> Hoja de Ruta</h4>
+                        <div className="min-w-[600px] relative px-4 pb-2">
+                            {/* Línea Base (Gris) */}
+                            <div className="absolute top-5 left-[3.5rem] right-[3.5rem] h-1 bg-slate-100 rounded-full z-0"></div>
+                            {/* Línea Activa (Verde) */}
+                            <div className="absolute top-5 left-[3.5rem] h-1 bg-emerald-500 rounded-full z-0 transition-all duration-700" style={{ width: `calc((100% - 7rem) * ${currentStepIndex / (trackingSteps.length - 1)})` }}></div>
 
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
-                            <div className="flex justify-between items-end mb-3">
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Monto Acordado</p>
-                                    <p className="text-2xl font-black text-slate-800">${Number(conn.proposalAmount || 0).toLocaleString()} MXN</p>
-                                </div>
-                                <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${conn.paymentStatus === 'funded' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
-                                    {conn.paymentStatus === 'funded' ? 'Pago Seguro Retenido' : conn.paymentStatus || 'Pendiente'}
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
-                                <span className="font-bold text-slate-600">Vía:</span> 
-                                {conn.proposalEscrow ? <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded flex items-center gap-1"><ShieldCheck size={12}/> Stripe (Seguro)</span> : <span className="text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1"><HeartHandshake size={12}/> Por fuera</span>}
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Hoja de Ruta</h4>
-                            
-                            {/* MAPA VISUAL (GPS REAL O PLANEADO) */}
-                            <div className="h-40 md:h-48 w-full bg-slate-100 rounded-xl overflow-hidden relative mb-5 border border-slate-200 shadow-inner">
-                                {googleApiKey ? (
-                                    <iframe
-                                        width="100%"
-                                        height="100%"
-                                        frameBorder="0"
-                                        style={{ border: 0 }}
-                                        src={mapUrl}
-                                        allowFullScreen
-                                        title="Ruta del Viaje"
-                                    ></iframe>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
-                                        <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest">Falta API Key de Google Maps</p>
-                                    </div>
-                                )}
-                                {conn.liveLocation && (
-                                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[9px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 uppercase tracking-widest pointer-events-none">
-                                        <Activity size={12} className="animate-pulse"/> Última Ubicación GPS
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* TIMELINE DE HOJA DE RUTA REAL */}
-                            <div className="space-y-4 relative before:absolute before:inset-0 before:ml-[15px] before:-translate-x-px before:h-full before:w-0.5 before:bg-slate-200 mt-2 mb-6">
-                                {trackingSteps.filter(s => s.time).map((step, idx) => (
-                                    <div key={idx} className="relative flex items-start gap-3">
-                                        <div className={`flex items-center justify-center w-8 h-8 rounded-full border-4 border-white bg-${step.color}-100 text-${step.color}-600 shadow-sm shrink-0 z-10`}>
-                                            <step.icon size={12}/>
-                                        </div>
-                                        <div className={`flex-1 p-2.5 rounded-xl bg-slate-50 border border-slate-100 shadow-sm ${idx === trackingSteps.filter(s => s.time).length - 1 ? 'border-blue-200 bg-blue-50/30' : ''}`}>
-                                            <span className={`font-black text-[9px] uppercase tracking-widest text-${step.color}-700 block mb-0.5`}>{step.label}</span>
-                                            <span className="text-xs font-bold text-slate-800">{safeDateStr(step.time)}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                                {trackingSteps.filter(s => s.time).length === 0 && (
-                                    <p className="text-xs text-slate-500 font-medium text-center py-4">No hay eventos registrados en la hoja de ruta aún.</p>
-                                )}
-                            </div>
-
-                            <div className="space-y-3 border-t border-slate-100 pt-4">
-                                <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Estatus General</p>
-                                    <p className="text-sm font-black text-slate-700">
-                                        {conn.currentTrackingStatus 
-                                            ? String(conn.currentTrackingStatus).replace(/_/g, ' ').toUpperCase() 
-                                            : (conn.tripStatus ? String(conn.tripStatus).toUpperCase() : 'AÚN NO INICIA')}
-                                    </p>
-                                </div>
-                                {conn.assignedVehicle && (
-                                    <div className="pt-3 border-t border-slate-100">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Unidad y Operador Asignados</p>
-                                        <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Truck size={12} className="text-blue-500"/> {conn.assignedVehicle.model} ({conn.assignedVehicle.plates})</p>
-                                        <p className="text-xs font-medium text-slate-600 flex items-center gap-1.5 mt-1"><UserIcon size={12} className="text-slate-400"/> {conn.assignedDriver?.name} - {conn.assignedDriver?.phone}</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                    </div>
-
-                    {/* Columna Derecha: CHAT EN VIVO */}
-                    <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-[400px] lg:h-auto">
-                        <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                            <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
-                            <p className="text-[10px] text-slate-500 font-medium mt-1">Los administradores tienen acceso de solo lectura para auditoría y resolución de disputas.</p>
-                        </div>
-                        
-                        <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-4">
-                            {isLoadingChat ? (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                    <Activity size={32} className="mb-2 opacity-50 animate-spin"/>
-                                    <p className="text-xs font-bold">Cargando conversación...</p>
-                                </div>
-                            ) : messages.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                    <MessageCircle size={32} className="mb-2 opacity-50"/>
-                                    <p className="text-xs font-bold">No hay mensajes registrados</p>
-                                </div>
-                            ) : (
-                                messages.map(m => {
-                                    const isFromShipper = m.senderId === conn.fromUid;
+                            <div className="flex justify-between relative z-10">
+                                {trackingSteps.map((step, idx) => {
+                                    const isCompleted = idx <= currentStepIndex;
+                                    const isCurrent = idx === currentStepIndex;
                                     return (
-                                        <div key={m.id} className={`flex flex-col w-full ${isFromShipper ? 'items-start' : 'items-end'}`}>
-                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
-                                                {isFromShipper ? conn.fromName : conn.toName}
-                                            </span>
-                                            <div className={`p-3 rounded-2xl text-xs font-medium shadow-sm max-w-[85%] ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm' : 'bg-blue-600 text-white rounded-tr-sm'}`}>
-                                                {m.text}
+                                        <div key={step.id} className="flex flex-col items-center w-20 relative">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-4 border-white shadow-sm transition-all duration-500 ${isCompleted ? 'bg-emerald-500 text-white scale-110' : 'bg-slate-100 text-slate-400'}`}>
+                                                <step.icon size={16} className={isCurrent && idx !== trackingSteps.length - 1 ? 'animate-pulse' : ''} />
                                             </div>
-                                            <span className="text-[8px] text-slate-400 mt-1 px-1">{formatMessageTime(m.timestamp)}</span>
+                                            <p className={`text-[9px] font-black uppercase tracking-wider mt-3 text-center leading-tight ${isCompleted ? 'text-slate-800' : 'text-slate-400'}`}>{step.label}</p>
+                                            <p className="text-[8px] text-slate-500 font-medium text-center mt-1">{step.time ? safeDateStr(step.time) : '--/--/--'}</p>
                                         </div>
                                     )
-                                })
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2. PANEL COMPACTO DE DISPUTA Y RESOLUCIÓN */}
+                    {isDisputed && (
+                        <div className="bg-red-50 border border-red-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
+                            <div className="w-full md:flex-1">
+                                <h3 className="font-black text-red-800 text-xs flex items-center gap-1.5 mb-1.5"><AlertTriangle size={14}/> Disputa Activa (Fondos Congelados)</h3>
+                                <p className="text-[11px] text-red-700 leading-tight"><strong>Motivo:</strong> "{conn.disputeDetails?.reason || 'No especificado'}" — <span className="opacity-80">Abierta por: {conn.disputeDetails?.openedByName}</span></p>
+                            </div>
+                            
+                            {isFunded ? (
+                                <div className="flex items-center gap-2 shrink-0 w-full md:w-auto mt-2 md:mt-0">
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'carrier')}
+                                        className="flex-1 md:flex-none px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <Truck size={14}/>} 
+                                        Pagar a Transp.
+                                    </button>
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'shipper')}
+                                        className="flex-1 md:flex-none px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <RotateCcw size={14}/>} 
+                                        Reembolsar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-[10px] font-bold text-red-600 px-3 py-1.5 bg-red-100 rounded-lg w-full md:w-auto text-center shrink-0">
+                                    Pago externo. Intervención manual requerida.
+                                </div>
                             )}
                         </div>
+                    )}
+
+                    {/* 3. COLUMNAS DE DETALLE (ACUERDO, MAPA, CHAT) */}
+                    <div className="flex flex-col lg:flex-row gap-5 h-full min-h-[400px]">
+                        
+                        {/* Mitad Izquierda: Acuerdo y Mapa */}
+                        <div className="w-full lg:w-1/2 flex flex-col gap-5">
+                            
+                            {/* Acuerdo Comercial */}
+                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
+                                <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
+                                <div className="flex justify-between items-end mb-3">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase">Monto Acordado</p>
+                                        <p className="text-2xl font-black text-slate-800">${Number(conn.proposalAmount || 0).toLocaleString()} MXN</p>
+                                    </div>
+                                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${conn.paymentStatus === 'funded' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
+                                        {conn.paymentStatus === 'funded' ? 'Pago Seguro Retenido' : conn.paymentStatus || 'Pendiente'}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
+                                    <span className="font-bold text-slate-600">Vía:</span> 
+                                    {conn.proposalEscrow ? <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded flex items-center gap-1"><ShieldCheck size={12}/> Stripe (Seguro)</span> : <span className="text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1"><HeartHandshake size={12}/> Por fuera</span>}
+                                </div>
+                            </div>
+
+                            {/* Mapa de Trayecto */}
+                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[250px]">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Trayecto Real</h4>
+                                    {conn.liveLocation && (
+                                        <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5">
+                                            <Activity size={10} className="animate-pulse"/> Último GPS detectado
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[200px]">
+                                    {googleApiKey ? (
+                                        <iframe
+                                            width="100%"
+                                            height="100%"
+                                            frameBorder="0"
+                                            style={{ border: 0 }}
+                                            src={mapUrl}
+                                            allowFullScreen
+                                            title="Ruta del Viaje"
+                                        ></iframe>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
+                                            <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest">Falta API Key de Google Maps</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Mitad Derecha: Historial de Chat */}
+                        <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-[400px] lg:h-auto">
+                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                                <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
+                                <p className="text-[10px] text-slate-500 font-medium mt-1">Modo auditoría. Acceso de solo lectura para soporte y resolución de disputas.</p>
+                            </div>
+                            
+                            <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-4">
+                                {isLoadingChat ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <Activity size={32} className="mb-2 opacity-50 animate-spin"/>
+                                        <p className="text-xs font-bold">Cargando conversación...</p>
+                                    </div>
+                                ) : messages.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <MessageCircle size={32} className="mb-2 opacity-50"/>
+                                        <p className="text-xs font-bold">No hay mensajes registrados</p>
+                                    </div>
+                                ) : (
+                                    messages.map(m => {
+                                        const isFromShipper = m.senderId === conn.fromUid;
+                                        return (
+                                            <div key={m.id} className={`flex flex-col w-full ${isFromShipper ? 'items-start' : 'items-end'}`}>
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
+                                                    {isFromShipper ? conn.fromName : conn.toName}
+                                                </span>
+                                                <div className={`p-3 rounded-2xl text-xs font-medium shadow-sm max-w-[85%] ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm' : 'bg-blue-600 text-white rounded-tr-sm'}`}>
+                                                    {m.text}
+                                                </div>
+                                                <span className="text-[8px] text-slate-400 mt-1 px-1">{formatMessageTime(m.timestamp)}</span>
+                                            </div>
+                                        )
+                                    })
+                                )}
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>
