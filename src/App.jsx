@@ -360,10 +360,29 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => unsub();
     }, [conn.id]);
 
-    // Calcular strings de origen y destino para el mapa en Iframe
-    const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
-    const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
-    const mapUrl = `https://www.google.com/maps/embed/v1/directions?key=${googleApiKey}&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destStr)}`;
+    // Calcular strings para el mapa en Iframe (Ruta vs GPS en Vivo)
+    let mapUrl = "";
+    if (conn.liveLocation) {
+        // Mostrar ubicación GPS real registrada
+        mapUrl = `https://www.google.com/maps/embed/v1/place?key=${googleApiKey}&q=${conn.liveLocation.lat},${conn.liveLocation.lng}&zoom=14`;
+    } else {
+        // Mostrar ruta planeada
+        const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
+        const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
+        mapUrl = `https://www.google.com/maps/embed/v1/directions?key=${googleApiKey}&origin=${encodeURIComponent(originStr)}&destination=${encodeURIComponent(destStr)}`;
+    }
+
+    // Extraer y procesar Hoja de Ruta
+    const tl = conn.timeline || {};
+    const trackingSteps = [
+        { label: "Viaje Creado", time: conn.createdAt, icon: FileText, color: "slate" },
+        { label: "Acuerdo & Asignación", time: tl.assigned || tl.confirmed, icon: CheckCircle, color: "blue" },
+        { label: "En Ruta al Origen", time: tl.en_ruta_origen || tl.en_ruta_a_origen, icon: Truck, color: "amber" },
+        { label: "Cargando", time: tl.cargando, icon: Package, color: "amber" },
+        { label: "En Tránsito", time: tl.en_transito, icon: Activity, color: "blue" },
+        { label: "Entregado", time: tl.entregado || tl.delivered, icon: MapPin, color: "emerald" },
+        { label: "Finalizado", time: tl.completed || tl.terminated, icon: ShieldCheck, color: "purple" }
+    ];
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
@@ -393,33 +412,33 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         
                         {/* 🚨 Panel de Disputa (Si aplica) */}
                         {isDisputed && (
-                            <div className="bg-red-50 border-2 border-red-200 p-5 rounded-2xl shadow-sm">
-                                <h3 className="font-black text-red-800 text-sm mb-3 flex items-center gap-1.5"><AlertTriangle size={16}/> Panel de Resolución de Disputa</h3>
-                                <p className="text-xs text-red-700 mb-2"><strong>Motivo reportado:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
-                                <p className="text-[10px] text-red-600 mb-3 uppercase tracking-widest">Abierta por: {conn.disputeDetails?.openedByName}</p>
+                            <div className="bg-red-50 border border-red-200 p-4 rounded-2xl shadow-sm">
+                                <h3 className="font-black text-red-800 text-sm mb-2 flex items-center gap-1.5"><AlertTriangle size={16}/> Panel de Resolución</h3>
+                                <p className="text-[11px] text-red-700 mb-1.5"><strong>Motivo:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
+                                <p className="text-[9px] text-red-600 mb-3 uppercase tracking-widest">Abierta por: {conn.disputeDetails?.openedByName}</p>
                                 
                                 {isFunded ? (
-                                    <div className="flex flex-col sm:flex-row gap-2 mt-1">
+                                    <div className="flex flex-row gap-2 mt-1">
                                         <button 
                                             disabled={resolvingDispute === conn.id}
                                             onClick={() => handleResolveDispute(conn, 'carrier')}
-                                            className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                            className="flex-1 py-2 px-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50"
                                         >
-                                            {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <Truck size={14}/>} 
-                                            Liberar a Transp.
+                                            {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <Truck size={12}/>} 
+                                            Pagar a Transp.
                                         </button>
                                         <button 
                                             disabled={resolvingDispute === conn.id}
                                             onClick={() => handleResolveDispute(conn, 'shipper')}
-                                            className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                            className="flex-1 py-2 px-2 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1 disabled:opacity-50"
                                         >
-                                            {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <RotateCcw size={14}/>} 
-                                            Reembolsar a Cliente
+                                            {resolvingDispute === conn.id ? <Activity size={12} className="animate-spin"/> : <RotateCcw size={12}/>} 
+                                            Reembolsar
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="bg-white/50 p-3 rounded-xl border border-red-100 text-center">
-                                        <p className="text-[10px] font-bold text-red-600">Este viaje no utilizó Pago Seguro. Comunícate con las partes para mediar el conflicto externo.</p>
+                                    <div className="bg-white/50 p-2 rounded-lg border border-red-100 text-center">
+                                        <p className="text-[9px] font-bold text-red-600">Este viaje no utilizó Pago Seguro. Comunícate con las partes para mediar.</p>
                                     </div>
                                 )}
                             </div>
@@ -443,11 +462,11 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
 
                         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Logística y Ruta</h4>
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Hoja de Ruta</h4>
                             
-                            {/* MAPA DE TRAYECTO VISUAL CON IFRAME NATIVO (SIN LIBRERÍAS EXTERNAS) */}
-                            <div className="h-40 md:h-48 w-full bg-slate-100 rounded-xl overflow-hidden relative mb-4 border border-slate-200">
-                                {googleApiKey && post ? (
+                            {/* MAPA VISUAL (GPS REAL O PLANEADO) */}
+                            <div className="h-40 md:h-48 w-full bg-slate-100 rounded-xl overflow-hidden relative mb-5 border border-slate-200 shadow-inner">
+                                {googleApiKey ? (
                                     <iframe
                                         width="100%"
                                         height="100%"
@@ -460,28 +479,37 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                 ) : (
                                     <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
                                         <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
-                                        <p className="text-[10px] font-bold uppercase tracking-widest">
-                                            {!googleApiKey ? 'Falta API Key de Google Maps' : 'Cargando mapa...'}
-                                        </p>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest">Falta API Key de Google Maps</p>
+                                    </div>
+                                )}
+                                {conn.liveLocation && (
+                                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[9px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 uppercase tracking-widest pointer-events-none">
+                                        <Activity size={12} className="animate-pulse"/> Última Ubicación GPS
                                     </div>
                                 )}
                             </div>
 
-                            <div className="flex items-center gap-4 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-[10px] font-bold text-blue-600 uppercase">Origen</p>
-                                    <p className="font-bold text-slate-800 text-sm truncate" title={post?.originCity}>{post ? post.originCity : 'Publicación Eliminada'}</p>
-                                </div>
-                                <ArrowRight size={16} className="text-slate-300 shrink-0"/>
-                                <div className="min-w-0 flex-1 text-right">
-                                    <p className="text-[10px] font-bold text-emerald-600 uppercase">Destino</p>
-                                    <p className="font-bold text-slate-800 text-sm truncate" title={post?.destinationCity}>{post ? post.destinationCity : 'Publicación Eliminada'}</p>
-                                </div>
+                            {/* TIMELINE DE HOJA DE RUTA REAL */}
+                            <div className="space-y-4 relative before:absolute before:inset-0 before:ml-[15px] before:-translate-x-px before:h-full before:w-0.5 before:bg-slate-200 mt-2 mb-6">
+                                {trackingSteps.filter(s => s.time).map((step, idx) => (
+                                    <div key={idx} className="relative flex items-start gap-3">
+                                        <div className={`flex items-center justify-center w-8 h-8 rounded-full border-4 border-white bg-${step.color}-100 text-${step.color}-600 shadow-sm shrink-0 z-10`}>
+                                            <step.icon size={12}/>
+                                        </div>
+                                        <div className={`flex-1 p-2.5 rounded-xl bg-slate-50 border border-slate-100 shadow-sm ${idx === trackingSteps.filter(s => s.time).length - 1 ? 'border-blue-200 bg-blue-50/30' : ''}`}>
+                                            <span className={`font-black text-[9px] uppercase tracking-widest text-${step.color}-700 block mb-0.5`}>{step.label}</span>
+                                            <span className="text-xs font-bold text-slate-800">{safeDateStr(step.time)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {trackingSteps.filter(s => s.time).length === 0 && (
+                                    <p className="text-xs text-slate-500 font-medium text-center py-4">No hay eventos registrados en la hoja de ruta aún.</p>
+                                )}
                             </div>
 
-                            <div className="space-y-3">
+                            <div className="space-y-3 border-t border-slate-100 pt-4">
                                 <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Estatus Actual</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-0.5">Estatus General</p>
                                     <p className="text-sm font-black text-slate-700">
                                         {conn.currentTrackingStatus 
                                             ? String(conn.currentTrackingStatus).replace(/_/g, ' ').toUpperCase() 
@@ -1384,7 +1412,8 @@ const AdminDashboard = () => {
                                         </button>
                                     </td>
                                 </tr>
-                            )}) : (
+                                );
+                            }) : (
                                 <tr>
                                     <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No se encontraron usuarios con esos filtros.</td>
                                 </tr>
