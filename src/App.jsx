@@ -5,7 +5,7 @@ import {
   Search, AlertTriangle, CheckCircle, XCircle, X,
   MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
   Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
-  Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw
+  Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -159,6 +159,158 @@ const EditUserModal = ({ user, onClose }) => {
                 >
                     {loading ? "Guardando..." : "Actualizar Perfil"}
                 </button>
+            </div>
+        </div>
+    );
+};
+
+// 2. MODAL DE DETALLE (DRILL-DOWN)
+const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) => {
+    const userPubs = useMemo(() => {
+        return [...allTrips, ...allLoads]
+            .filter(p => p.userId === user.id)
+            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    }, [allTrips, allLoads, user.id]);
+
+    const userConns = useMemo(() => {
+        return allConnections
+            .filter(c => c.participants && c.participants.includes(user.id))
+            .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    }, [allConnections, user.id]);
+
+    const stats = {
+        activePubs: userPubs.filter(p => p.status === 'active').length,
+        totalPubs: userPubs.length,
+        completedTrips: userConns.filter(c => c.tripStatus === 'completed').length,
+        totalConns: userConns.length
+    };
+
+    // Extraer fecha de vencimiento
+    const expDate = user.subscriptionEndsAt?.seconds 
+        ? new Date(user.subscriptionEndsAt.seconds * 1000).toLocaleDateString() 
+        : (user.currentPeriodEnd?.seconds ? new Date(user.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+            <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
+                
+                {/* Cabecera del Detalle */}
+                <div className="bg-white px-8 py-6 border-b border-slate-200 flex justify-between items-start shrink-0">
+                    <div className="flex gap-5 items-center">
+                        <div className="w-16 h-16 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shrink-0 shadow-sm">
+                            {user.photoData ? <img src={user.photoData} alt="Logo" className="w-full h-full object-cover" /> : <Users size={28}/>}
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <h2 className="text-2xl font-black text-slate-800 leading-none">{user.businessName || 'Usuario sin nombre'}</h2>
+                                {user.isSuspended && <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Ban size={10}/> Suspendido</span>}
+                                {user.isAdmin && <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Shield size={10}/> Admin</span>}
+                            </div>
+                            <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-500 mt-2">
+                                <span className="flex items-center gap-1.5"><Mail size={14}/> {user.email || user.id}</span>
+                                {user.phone && <span className="flex items-center gap-1.5"><Phone size={14}/> {user.phone}</span>}
+                                <span className={`px-2 py-0.5 rounded-md font-bold uppercase tracking-wider text-[9px] border ${user.role === 'carrier' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
+                                    {user.role === 'carrier' ? 'Transportista' : 'Generador'}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] border ${user.tier === 'premium' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                    {user.tier === 'premium' ? `PREMIUM (Vence: ${expDate})` : 'FREE'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
+                </div>
+
+                {/* Contenido Scrolleable */}
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
+                    
+                    {/* Tarjetas de Métricas */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Package size={12}/> Pub. Activas</p>
+                            <p className="text-3xl font-black text-slate-800">{stats.activePubs}</p>
+                        </div>
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><FileText size={12}/> Pub. Totales</p>
+                            <p className="text-3xl font-black text-slate-800">{stats.totalPubs}</p>
+                        </div>
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><LinkIcon size={12}/> Interacciones</p>
+                            <p className="text-3xl font-black text-slate-800">{stats.totalConns}</p>
+                        </div>
+                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-center">
+                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center gap-1"><CheckCircle size={12}/> Viajes Exitosos</p>
+                            <p className="text-3xl font-black text-emerald-700">{stats.completedTrips}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid lg:grid-cols-2 gap-8">
+                        {/* Lista de Publicaciones */}
+                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
+                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                                    <Package size={16} className="text-blue-500"/> Historial de Publicaciones
+                                </h3>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/30">
+                                {userPubs.length > 0 ? userPubs.map(pub => (
+                                    <div key={pub.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm text-sm flex justify-between items-center gap-3">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-bold text-slate-700 truncate flex items-center gap-1.5">
+                                                {pub.originCity} <ArrowRight size={12} className="text-slate-300"/> {pub.destinationCity}
+                                            </p>
+                                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                                                <span className="font-mono bg-slate-100 px-1 rounded">{pub.customId || pub.id.substring(0,6)}</span>
+                                                <span>•</span>
+                                                <span className="flex items-center gap-1"><Calendar size={10}/> {pub.date || 'Fija'}</span>
+                                            </div>
+                                        </div>
+                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 ${pub.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : pub.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                            {pub.status.toUpperCase()}
+                                        </span>
+                                    </div>
+                                )) : (
+                                    <p className="text-center text-slate-400 text-xs py-10 font-medium">No tiene publicaciones.</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Lista de Conexiones */}
+                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
+                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                                    <LinkIcon size={16} className="text-purple-500"/> Interacciones en la Red
+                                </h3>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/30">
+                                {userConns.length > 0 ? userConns.map(conn => {
+                                    const otherName = conn.fromUid === user.id ? conn.toName : conn.fromName;
+                                    const isSender = conn.fromUid === user.id;
+                                    const targetStatus = conn.tripStatus || conn.status;
+                                    
+                                    return (
+                                    <div key={conn.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm text-sm flex justify-between items-center gap-3">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-bold text-slate-700 truncate">
+                                                Con: <span className="text-blue-600">{otherName}</span>
+                                            </p>
+                                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
+                                                <span>{isSender ? 'Solicitó contactar' : 'Recibió solicitud'}</span>
+                                                <span>•</span>
+                                                <span className="font-mono">{new Date(conn.createdAt?.seconds * 1000 || Date.now()).toLocaleDateString()}</span>
+                                            </div>
+                                        </div>
+                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 ${targetStatus === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : targetStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                            {targetStatus.toUpperCase()}
+                                        </span>
+                                    </div>
+                                )}) : (
+                                    <p className="text-center text-slate-400 text-xs py-10 font-medium">No tiene interacciones registradas.</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
