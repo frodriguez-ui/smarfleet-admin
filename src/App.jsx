@@ -8,6 +8,7 @@ import {
   Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle,
   DollarSign, HeartHandshake, Clock
 } from 'lucide-react';
+import { GoogleMap, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 import { initializeApp } from 'firebase/app';
@@ -33,28 +34,7 @@ const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
 
-// ============================================================================
-// --- CARGADOR NATIVO DE GOOGLE MAPS (SIN LIBRERÍAS EXTERNAS) ---
-// ============================================================================
-const loadGoogleMapsScript = (apiKey, callback) => {
-    if (!apiKey) return;
-    if (window.google && window.google.maps) {
-        callback();
-        return;
-    }
-    const existingScript = document.getElementById('googleMapsNativeScript');
-    if (existingScript) {
-        existingScript.addEventListener('load', callback);
-        return;
-    }
-    const script = document.createElement('script');
-    script.id = 'googleMapsNativeScript';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-    script.async = true;
-    script.defer = true;
-    script.onload = callback;
-    document.body.appendChild(script);
-};
+const LIBRARIES = ['places'];
 
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
@@ -358,6 +338,29 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
     );
 };
 
+// ============================================================================
+// --- CARGADOR NATIVO DE GOOGLE MAPS PARA COMPONENTES QUE NO USAN IFRAME ---
+// ============================================================================
+const loadGoogleMapsScript = (apiKey, callback) => {
+    if (!apiKey) return;
+    if (window.google && window.google.maps) {
+        callback();
+        return;
+    }
+    const existingScript = document.getElementById('googleMapsNativeScript');
+    if (existingScript) {
+        existingScript.addEventListener('load', callback);
+        return;
+    }
+    const script = document.createElement('script');
+    script.id = 'googleMapsNativeScript';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.async = true;
+    script.defer = true;
+    script.onload = callback;
+    document.body.appendChild(script);
+};
+
 // 3. MODAL DE DETALLE DE CONEXIÓN Y CHAT (EXCLUSIVO ADMIN)
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
@@ -391,74 +394,75 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             const logs = snap.docs.map(d => d.data());
             let combined = [...(conn.trackingHistory || []), ...logs];
             
-            // Remover duplicados exactos
+            // Remover duplicados y homogenizar coordenadas
             const unique = [];
             const seen = new Set();
             combined.forEach(item => {
-                const key = `${item.lat}-${item.lng}`;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    unique.push(item);
+                // Aceptamos lat/lng o latitude/longitude dependiendo de cómo se guardó
+                const lat = item.lat || item.latitude;
+                const lng = item.lng || item.longitude;
+                if(lat !== undefined && lng !== undefined) {
+                    const key = `${lat}-${lng}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        unique.push(item);
+                    }
                 }
             });
             unique.sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
             setTrackingHistory(unique);
+        }, (err) => {
+            console.warn("Aviso: No se cargó trackingLogs (posible falta de índice). Usando fallback.", err);
+            // Fallback en caso de que falte el índice en Firebase
+            if (conn.trackingHistory && Array.isArray(conn.trackingHistory)) {
+                setTrackingHistory(conn.trackingHistory);
+            }
         });
 
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, conn.trackingHistory]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO CON DOBLE LÍNEA
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (RUTA PLANEADA + RUTA REAL)
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
         loadGoogleMapsScript(googleApiKey, () => {
             const map = new window.google.maps.Map(mapRef.current, {
                 zoom: 5,
-                center: { lat: 23.6345, lng: -102.5528 }, // Centro de México
+                center: { lat: 23.6345, lng: -102.5528 }, // Centro de México default
                 disableDefaultUI: true,
                 zoomControl: true
             });
 
-            // A) DIBUJAR RUTA PLANEADA (Línea Gris Punteada)
-            const directionsService = new window.google.maps.DirectionsService();
-            const directionsRenderer = new window.google.maps.DirectionsRenderer({
-                map,
-                suppressMarkers: false,
-                polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
-            });
-
-            const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
-            const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
-
-            if (originStr && destStr) {
-                directionsService.route({
-                    origin: originStr,
-                    destination: destStr,
-                    travelMode: window.google.maps.TravelMode.DRIVING,
-                }).then(response => {
-                    directionsRenderer.setDirections(response);
-                }).catch(e => console.warn("No se pudo calcular la ruta planeada", e));
-            }
+            let realRouteBounds = new window.google.maps.LatLngBounds();
+            let hasRealRoute = false;
 
             // B) DIBUJAR RUTA REAL RECORRIDA POR EL TRANSPORTISTA (Línea Azul Fuerte)
             if (trackingHistory.length > 0) {
-                const routePath = trackingHistory.filter(h => h.lat && h.lng).map(h => ({ lat: Number(h.lat), lng: Number(h.lng) }));
+                const routePath = trackingHistory
+                    .map(h => ({ lat: Number(h.lat || h.latitude), lng: Number(h.lng || h.longitude) }))
+                    .filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+
                 if (routePath.length > 0) {
+                    hasRealRoute = true;
                     new window.google.maps.Polyline({
                         path: routePath,
                         geodesic: true,
                         strokeColor: '#3b82f6', // Azul 500
                         strokeOpacity: 1.0,
-                        strokeWeight: 5,
+                        strokeWeight: 6,
                         map
                     });
+                    routePath.forEach(p => realRouteBounds.extend(p));
                 }
             }
 
             // C) MARCADOR DE UBICACIÓN ACTUAL GPS
-            if (conn.liveLocation?.lat && conn.liveLocation?.lng) {
-                const currentPos = { lat: Number(conn.liveLocation.lat), lng: Number(conn.liveLocation.lng) };
+            const liveLat = conn.liveLocation?.lat || conn.liveLocation?.latitude;
+            const liveLng = conn.liveLocation?.lng || conn.liveLocation?.longitude;
+
+            if (liveLat && liveLng) {
+                const currentPos = { lat: Number(liveLat), lng: Number(liveLng) };
                 new window.google.maps.Marker({
                     position: currentPos,
                     map,
@@ -473,11 +477,39 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                     },
                     zIndex: 999
                 });
-                // Centrar automáticamente en la ubicación GPS
-                setTimeout(() => {
-                    map.panTo(currentPos);
-                    map.setZoom(11);
-                }, 500);
+                realRouteBounds.extend(currentPos);
+                hasRealRoute = true;
+            }
+
+            // A) DIBUJAR RUTA PLANEADA (Línea Gris Punteada)
+            const directionsService = new window.google.maps.DirectionsService();
+            const directionsRenderer = new window.google.maps.DirectionsRenderer({
+                map,
+                suppressMarkers: false,
+                preserveViewport: hasRealRoute, // No reenfocar automáticamente si ya tenemos la ruta real en pantalla
+                polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
+            });
+
+            const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
+            const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
+
+            if (originStr && destStr) {
+                directionsService.route({
+                    origin: originStr,
+                    destination: destStr,
+                    travelMode: window.google.maps.TravelMode.DRIVING,
+                }).then(response => {
+                    directionsRenderer.setDirections(response);
+                    // Si tenemos una ruta real, forzamos la cámara a enfocarse en ella (y no en la planeada)
+                    if (hasRealRoute) {
+                        map.fitBounds(realRouteBounds);
+                    }
+                }).catch(e => {
+                    console.warn("No se pudo calcular la ruta planeada", e);
+                    if (hasRealRoute) map.fitBounds(realRouteBounds);
+                });
+            } else if (hasRealRoute) {
+                map.fitBounds(realRouteBounds);
             }
         });
     }, [trackingHistory, post, conn.liveLocation, googleApiKey]);
@@ -603,7 +635,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                 </div>
                             </div>
 
-                            {/* Mapa de Trayecto */}
+                            {/* Mapa de Trayecto Real vs Planeado */}
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[300px]">
                                 <div className="flex justify-between items-center mb-4">
                                     <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Trayecto Real</h4>
