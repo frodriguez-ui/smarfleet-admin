@@ -55,23 +55,36 @@ const formatMessageTime = (ts) => {
     return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 };
 
-const loadGoogleMapsScript = (apiKey, callback) => {
+// 🌟 CARGADOR NATIVO CON MANEJO DE ERRORES DE GOOGLE CLOUD 🌟
+const loadGoogleMapsScript = (apiKey, callback, onError) => {
     if (!apiKey) return;
+    
+    // Si ya cargó previamente con éxito
     if (window.google && window.google.maps) {
         callback();
         return;
     }
+
+    // Atrapador de errores de autenticación de Google Maps
+    window.gm_authFailure = () => {
+        console.error("Fallo de Autenticación de Google Maps detectado.");
+        if (onError) onError();
+    };
+
     const existingScript = document.getElementById('googleMapsNativeScript');
     if (existingScript) {
         existingScript.addEventListener('load', callback);
+        existingScript.addEventListener('error', onError);
         return;
     }
+    
     const script = document.createElement('script');
     script.id = 'googleMapsNativeScript';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
     script.defer = true;
     script.onload = callback;
+    script.onerror = onError;
     document.body.appendChild(script);
 };
 
@@ -327,6 +340,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
     const [messages, setMessages] = useState([]);
     const [trackingHistory, setTrackingHistory] = useState([]);
     const [isLoadingChat, setIsLoadingChat] = useState(true);
+    const [mapError, setMapError] = useState(false);
     const mapRef = useRef(null);
 
     const post = [...trips, ...loads].find(p => p.id === conn.postId);
@@ -377,15 +391,14 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, conn.trackingHistory]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (CORRECCIÓN DE ALTURA Y LIMPIEZA)
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
         loadGoogleMapsScript(googleApiKey, () => {
             if (!mapRef.current) return;
-
-            // Limpiamos el contenedor para evitar sobreescritura de instancias de Google Maps
             mapRef.current.innerHTML = '';
+            setMapError(false);
             
             const map = new window.google.maps.Map(mapRef.current, {
                 zoom: 5,
@@ -439,7 +452,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                 hasRealRoute = true;
             }
 
-            // Calculamos ruta planeada, permitiendo fallback si "post" fue eliminado de trips/loads
             const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
             const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
 
@@ -448,7 +460,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                 const directionsRenderer = new window.google.maps.DirectionsRenderer({
                     map,
                     suppressMarkers: false,
-                    preserveViewport: hasRealRoute, // Si ya tenemos ruta azul, no reenfocamos hacia la gris
+                    preserveViewport: hasRealRoute, 
                     polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
                 });
 
@@ -468,6 +480,9 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             } else if (hasRealRoute) {
                 map.fitBounds(realRouteBounds);
             }
+        }, () => {
+            // Manejador de Errores de Google Maps
+            setMapError(true);
         });
     }, [trackingHistory, post, conn.liveLocation, googleApiKey]);
 
@@ -594,8 +609,14 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                     )}
                                 </div>
 
-                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[250px]">
-                                    {googleApiKey ? (
+                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[250px] flex flex-col">
+                                    {mapError ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-rose-50 p-6 text-center m-2 rounded-xl">
+                                            <AlertTriangle size={32} className="text-rose-400 mb-3"/>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-rose-700 mb-1">Carga Restringida por Google</p>
+                                            <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Habilita <strong className="font-black">Maps JavaScript API</strong>, <strong className="font-black">Directions API</strong> y asegúrate de configurar tu cuenta de <strong className="font-black">Facturación</strong> en Google Cloud Console para poder visualizar mapas interactivos.</p>
+                                        </div>
+                                    ) : googleApiKey ? (
                                         <div ref={mapRef} style={{ width: '100%', minHeight: '300px', height: '100%' }} className="absolute inset-0"></div>
                                     ) : (
                                         <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
