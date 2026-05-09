@@ -55,37 +55,39 @@ const formatMessageTime = (ts) => {
     return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 };
 
-// 🌟 CARGADOR NATIVO CON MANEJO DE ERRORES DE GOOGLE CLOUD 🌟
-const loadGoogleMapsScript = (apiKey, callback, onError) => {
-    if (!apiKey) return;
-    
-    // Si ya cargó previamente con éxito
-    if (window.google && window.google.maps) {
-        callback();
-        return;
-    }
+// 🌟 CARGADOR NATIVO CON MANEJO DE ERRORES (PROMESAS) 🌟
+let googleMapsPromise = null;
 
-    // Atrapador de errores de autenticación de Google Maps
-    window.gm_authFailure = () => {
-        console.error("Fallo de Autenticación de Google Maps detectado.");
-        if (onError) onError();
-    };
-
-    const existingScript = document.getElementById('googleMapsNativeScript');
-    if (existingScript) {
-        existingScript.addEventListener('load', callback);
-        existingScript.addEventListener('error', onError);
-        return;
-    }
+const loadGoogleMapsScript = (apiKey) => {
+    if (!apiKey) return Promise.reject(new Error("No API Key"));
+    if (window.google && window.google.maps) return Promise.resolve();
     
-    const script = document.createElement('script');
-    script.id = 'googleMapsNativeScript';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    script.onload = callback;
-    script.onerror = onError;
-    document.body.appendChild(script);
+    if (!googleMapsPromise) {
+        googleMapsPromise = new Promise((resolve, reject) => {
+            // Atrapador de errores de autenticación de Google Maps
+            window.gm_authFailure = () => {
+                console.error("Fallo de Autenticación de Google Maps detectado.");
+                reject(new Error("auth_failure"));
+            };
+
+            const existingScript = document.getElementById('googleMapsNativeScript');
+            if (existingScript) {
+                existingScript.onload = resolve;
+                existingScript.onerror = reject;
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.id = 'googleMapsNativeScript';
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+            script.async = true;
+            script.defer = true;
+            script.onload = () => resolve();
+            script.onerror = (err) => reject(err);
+            document.body.appendChild(script);
+        });
+    }
+    return googleMapsPromise;
 };
 
 // ============================================================================
@@ -391,99 +393,101 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, conn.trackingHistory]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (CORRECCIÓN CON PROMESAS)
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
-        loadGoogleMapsScript(googleApiKey, () => {
-            if (!mapRef.current) return;
-            mapRef.current.innerHTML = '';
-            setMapError(false);
-            
-            const map = new window.google.maps.Map(mapRef.current, {
-                zoom: 5,
-                center: { lat: 23.6345, lng: -102.5528 }, 
-                disableDefaultUI: true,
-                zoomControl: true
-            });
-
-            let realRouteBounds = new window.google.maps.LatLngBounds();
-            let hasRealRoute = false;
-
-            if (trackingHistory.length > 0) {
-                const routePath = trackingHistory
-                    .map(h => ({ lat: Number(h.lat || h.latitude), lng: Number(h.lng || h.longitude) }))
-                    .filter(p => !isNaN(p.lat) && !isNaN(p.lng) && p.lat !== 0 && p.lng !== 0);
-
-                if (routePath.length > 0) {
-                    hasRealRoute = true;
-                    new window.google.maps.Polyline({
-                        path: routePath,
-                        geodesic: true,
-                        strokeColor: '#3b82f6', 
-                        strokeOpacity: 1.0,
-                        strokeWeight: 6,
-                        map
-                    });
-                    routePath.forEach(p => realRouteBounds.extend(p));
-                }
-            }
-
-            const liveLat = conn.liveLocation?.lat || conn.liveLocation?.latitude;
-            const liveLng = conn.liveLocation?.lng || conn.liveLocation?.longitude;
-
-            if (liveLat && liveLng) {
-                const currentPos = { lat: Number(liveLat), lng: Number(liveLng) };
-                new window.google.maps.Marker({
-                    position: currentPos,
-                    map,
-                    title: 'Ubicación GPS Actual',
-                    icon: {
-                        path: window.google.maps.SymbolPath.CIRCLE,
-                        scale: 8,
-                        fillColor: '#ef4444',
-                        fillOpacity: 1,
-                        strokeColor: '#ffffff',
-                        strokeWeight: 2,
-                    },
-                    zIndex: 999
-                });
-                realRouteBounds.extend(currentPos);
-                hasRealRoute = true;
-            }
-
-            const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
-            const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
-
-            if (originStr && destStr) {
-                const directionsService = new window.google.maps.DirectionsService();
-                const directionsRenderer = new window.google.maps.DirectionsRenderer({
-                    map,
-                    suppressMarkers: false,
-                    preserveViewport: hasRealRoute, 
-                    polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
+        loadGoogleMapsScript(googleApiKey)
+            .then(() => {
+                if (!mapRef.current) return;
+                mapRef.current.innerHTML = '';
+                setMapError(false);
+                
+                const map = new window.google.maps.Map(mapRef.current, {
+                    zoom: 5,
+                    center: { lat: 23.6345, lng: -102.5528 }, 
+                    disableDefaultUI: true,
+                    zoomControl: true
                 });
 
-                directionsService.route({
-                    origin: originStr,
-                    destination: destStr,
-                    travelMode: window.google.maps.TravelMode.DRIVING,
-                }).then(response => {
-                    directionsRenderer.setDirections(response);
-                    if (hasRealRoute) {
-                        map.fitBounds(realRouteBounds);
+                let realRouteBounds = new window.google.maps.LatLngBounds();
+                let hasRealRoute = false;
+
+                if (trackingHistory.length > 0) {
+                    const routePath = trackingHistory
+                        .map(h => ({ lat: Number(h.lat || h.latitude), lng: Number(h.lng || h.longitude) }))
+                        .filter(p => !isNaN(p.lat) && !isNaN(p.lng) && p.lat !== 0 && p.lng !== 0);
+
+                    if (routePath.length > 0) {
+                        hasRealRoute = true;
+                        new window.google.maps.Polyline({
+                            path: routePath,
+                            geodesic: true,
+                            strokeColor: '#3b82f6', 
+                            strokeOpacity: 1.0,
+                            strokeWeight: 6,
+                            map
+                        });
+                        routePath.forEach(p => realRouteBounds.extend(p));
                     }
-                }).catch(e => {
-                    console.warn("No se pudo calcular la ruta planeada gris", e);
-                    if (hasRealRoute) map.fitBounds(realRouteBounds);
-                });
-            } else if (hasRealRoute) {
-                map.fitBounds(realRouteBounds);
-            }
-        }, () => {
-            // Manejador de Errores de Google Maps
-            setMapError(true);
-        });
+                }
+
+                const liveLat = conn.liveLocation?.lat || conn.liveLocation?.latitude;
+                const liveLng = conn.liveLocation?.lng || conn.liveLocation?.longitude;
+
+                if (liveLat && liveLng) {
+                    const currentPos = { lat: Number(liveLat), lng: Number(liveLng) };
+                    new window.google.maps.Marker({
+                        position: currentPos,
+                        map,
+                        title: 'Ubicación GPS Actual',
+                        icon: {
+                            path: window.google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: '#ef4444',
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2,
+                        },
+                        zIndex: 999
+                    });
+                    realRouteBounds.extend(currentPos);
+                    hasRealRoute = true;
+                }
+
+                const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
+                const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
+
+                if (originStr && destStr) {
+                    const directionsService = new window.google.maps.DirectionsService();
+                    const directionsRenderer = new window.google.maps.DirectionsRenderer({
+                        map,
+                        suppressMarkers: false,
+                        preserveViewport: hasRealRoute, 
+                        polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
+                    });
+
+                    directionsService.route({
+                        origin: originStr,
+                        destination: destStr,
+                        travelMode: window.google.maps.TravelMode.DRIVING,
+                    }).then(response => {
+                        directionsRenderer.setDirections(response);
+                        if (hasRealRoute) {
+                            map.fitBounds(realRouteBounds);
+                        }
+                    }).catch(e => {
+                        console.warn("No se pudo calcular la ruta planeada gris", e);
+                        if (hasRealRoute) map.fitBounds(realRouteBounds);
+                    });
+                } else if (hasRealRoute) {
+                    map.fitBounds(realRouteBounds);
+                }
+            })
+            .catch((err) => {
+                console.error("Error al cargar Google Maps:", err);
+                setMapError(true);
+            });
     }, [trackingHistory, post, conn.liveLocation, googleApiKey]);
 
     const tl = conn.timeline || {};
@@ -611,17 +615,17 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
 
                                 <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[250px] flex flex-col">
                                     {mapError ? (
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-rose-50 p-6 text-center m-2 rounded-xl">
-                                            <AlertTriangle size={32} className="text-rose-400 mb-3"/>
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-rose-700 mb-1">Carga Restringida por Google</p>
-                                            <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Habilita <strong className="font-black">Maps JavaScript API</strong>, <strong className="font-black">Directions API</strong> y asegúrate de configurar tu cuenta de <strong className="font-black">Facturación</strong> en Google Cloud Console para poder visualizar mapas interactivos.</p>
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-rose-50 p-6 text-center m-2 rounded-xl border-2 border-rose-200 shadow-inner">
+                                            <AlertTriangle size={32} className="text-rose-500 mb-3"/>
+                                            <p className="text-xs font-black uppercase tracking-widest text-rose-800 mb-1.5">No se pudo cargar el mapa</p>
+                                            <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Es posible que el dominio desde donde abres esta página no esté autorizado en las restricciones de tu API Key de Google Cloud. Por favor, asegúrate de permitir las variaciones de dominios en la consola de Google.</p>
                                         </div>
-                                    ) : googleApiKey ? (
-                                        <div ref={mapRef} style={{ width: '100%', minHeight: '300px', height: '100%' }} className="absolute inset-0"></div>
                                     ) : (
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
-                                            <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
-                                            <p className="text-[10px] font-bold uppercase tracking-widest">Falta API Key de Google Maps</p>
+                                        <div ref={mapRef} style={{ width: '100%', minHeight: '300px', height: '100%' }} className="absolute inset-0 flex items-center justify-center bg-slate-50">
+                                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                                <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest">Iniciando Google Maps...</p>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
