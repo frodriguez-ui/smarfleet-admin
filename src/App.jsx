@@ -2,19 +2,26 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { 
   Shield, Users, User as UserIcon, Truck, Package, LogOut, 
-  Search, AlertTriangle, CheckCircle, XCircle, X,
-  MapPin, Calendar, Link as LinkIcon, Trash2, Edit, Filter,
-  Leaf, TrendingUp, BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
-  Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle,
-  DollarSign, HeartHandshake, Clock
+  AlertTriangle, CheckCircle, X, MapPin, Calendar, Link as LinkIcon, Edit,
+  BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
+  Bell, DollarSign, HeartHandshake, Clock, ShieldCheck, RotateCcw, MessageCircle
 } from 'lucide-react';
+import { GoogleMap, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
+
+// --- IMPORTACIONES DE TUS COMPONENTES MODULARIZADOS ---
+// Asegúrate de que estos 5 archivos existan en src/Components/Admin/
+import { OverviewTab } from './Components/Admin/OverviewTab';
+import { NotificationsTab } from './Components/Admin/NotificationsTab';
+import { UsersTab } from './Components/Admin/UsersTab';
+import { PublicationsTab } from './Components/Admin/PublicationsTab';
+import { ConnectionsTab } from './Components/Admin/ConnectionsTab';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { 
   getFirestore, collectionGroup, collection, query, onSnapshot, 
-  doc, getDoc, updateDoc, setDoc, deleteDoc, writeBatch, serverTimestamp, orderBy
+  doc, getDoc, updateDoc, writeBatch, serverTimestamp, orderBy, deleteDoc
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -33,6 +40,8 @@ const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
 
+const LIBRARIES = ['places'];
+
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
 // ============================================================================
@@ -50,35 +59,24 @@ const formatMessageTime = (ts) => {
     return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 };
 
-
-// ============================================================================
-// --- COMPONENTE AUXILIAR (PAGINACIÓN) ---
-// ============================================================================
-const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange }) => {
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
-    if (totalPages <= 1) return null;
-
-    return (
-        <div className="flex flex-col items-center gap-3 p-6 bg-white border-t border-slate-100">
-            <div className="flex items-center gap-1.5">
-                <button disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors text-slate-600 shadow-sm"><ChevronLeft size={16} /></button>
-                <div className="flex items-center gap-1">
-                    {[...Array(totalPages)].map((_, i) => {
-                        const pageNum = i + 1;
-                        return (
-                            <button key={pageNum} onClick={() => onPageChange(pageNum)} className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${currentPage === pageNum ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                                {pageNum}
-                            </button>
-                        );
-                    })}
-                </div>
-                <button disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors text-slate-600 shadow-sm rotate-180"><ChevronLeft size={16} /></button>
-            </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
-                Página {currentPage} de {totalPages} ({totalItems} resultados)
-            </p>
-        </div>
-    );
+const loadGoogleMapsScript = (apiKey, callback) => {
+    if (!apiKey) return;
+    if (window.google && window.google.maps) {
+        callback();
+        return;
+    }
+    const existingScript = document.getElementById('googleMapsNativeScript');
+    if (existingScript) {
+        existingScript.addEventListener('load', callback);
+        return;
+    }
+    const script = document.createElement('script');
+    script.id = 'googleMapsNativeScript';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    script.async = true;
+    script.defer = true;
+    script.onload = callback;
+    document.body.appendChild(script);
 };
 
 // ============================================================================
@@ -204,7 +202,6 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
         totalConns: userConns.length
     };
 
-    // Extraer fecha de vencimiento
     const expDate = user.subscriptionEndsAt?.seconds 
         ? new Date(user.subscriptionEndsAt.seconds * 1000).toLocaleDateString() 
         : (user.currentPeriodEnd?.seconds ? new Date(user.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
@@ -213,7 +210,6 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
             <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
                 
-                {/* Cabecera del Detalle */}
                 <div className="bg-white px-8 py-6 border-b border-slate-200 flex justify-between items-start shrink-0">
                     <div className="flex gap-5 items-center">
                         <div className="w-16 h-16 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shrink-0 shadow-sm">
@@ -240,10 +236,7 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
                     <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
-                {/* Contenido Scrolleable */}
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
-                    
-                    {/* Tarjetas de Métricas */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Package size={12}/> Pub. Activas</p>
@@ -264,7 +257,6 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
                     </div>
 
                     <div className="grid lg:grid-cols-2 gap-8">
-                        {/* Lista de Publicaciones */}
                         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
                             <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
@@ -294,7 +286,6 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
                             </div>
                         </div>
 
-                        {/* Lista de Conexiones */}
                         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
                             <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
@@ -335,29 +326,6 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
     );
 };
 
-// ============================================================================
-// --- CARGADOR NATIVO DE GOOGLE MAPS PARA COMPONENTES QUE NO USAN IFRAME ---
-// ============================================================================
-const loadGoogleMapsScript = (apiKey, callback) => {
-    if (!apiKey) return;
-    if (window.google && window.google.maps) {
-        callback();
-        return;
-    }
-    const existingScript = document.getElementById('googleMapsNativeScript');
-    if (existingScript) {
-        existingScript.addEventListener('load', callback);
-        return;
-    }
-    const script = document.createElement('script');
-    script.id = 'googleMapsNativeScript';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
-    script.async = true;
-    script.defer = true;
-    script.onload = callback;
-    document.body.appendChild(script);
-};
-
 // 3. MODAL DE DETALLE DE CONEXIÓN Y CHAT (EXCLUSIVO ADMIN)
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
@@ -374,8 +342,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
     // 1. CARGAR CHAT E HISTORIAL DE RUTA DESDE FIREBASE
     useEffect(() => {
         setIsLoadingChat(true);
-        
-        // Historial de mensajes
         const qMsg = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages'), orderBy('timestamp', 'asc'));
         const unsubMsg = onSnapshot(qMsg, snap => {
             setMessages(snap.docs.map(d => ({id: d.id, ...d.data()})));
@@ -385,17 +351,14 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             setIsLoadingChat(false);
         });
 
-        // Historial logístico real (Migas de pan GPS)
         const qTrack = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'trackingLogs'), orderBy('timestamp', 'asc'));
         const unsubTrack = onSnapshot(qTrack, snap => {
             const logs = snap.docs.map(d => d.data());
             let combined = [...(conn.trackingHistory || []), ...logs];
             
-            // Remover duplicados y homogenizar coordenadas
             const unique = [];
             const seen = new Set();
             combined.forEach(item => {
-                // Aceptamos lat/lng o latitude/longitude
                 const lat = item.lat || item.latitude;
                 const lng = item.lng || item.longitude;
                 if(lat !== undefined && lng !== undefined) {
@@ -409,7 +372,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             unique.sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
             setTrackingHistory(unique);
         }, (err) => {
-            console.warn("Aviso: No se cargó trackingLogs (posible falta de índice). Usando fallback.", err);
+            console.warn("Aviso: No se cargó trackingLogs. Usando fallback.", err);
             if (conn.trackingHistory && Array.isArray(conn.trackingHistory)) {
                 setTrackingHistory(conn.trackingHistory);
             }
@@ -418,14 +381,14 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, conn.trackingHistory]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (RUTA PLANEADA + RUTA REAL)
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
         loadGoogleMapsScript(googleApiKey, () => {
             const map = new window.google.maps.Map(mapRef.current, {
                 zoom: 5,
-                center: { lat: 23.6345, lng: -102.5528 }, // Centro de México default
+                center: { lat: 23.6345, lng: -102.5528 }, 
                 disableDefaultUI: true,
                 zoomControl: true
             });
@@ -433,7 +396,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             let realRouteBounds = new window.google.maps.LatLngBounds();
             let hasRealRoute = false;
 
-            // B) DIBUJAR RUTA REAL RECORRIDA POR EL TRANSPORTISTA (Línea Azul Fuerte)
             if (trackingHistory.length > 0) {
                 const routePath = trackingHistory
                     .map(h => ({ lat: Number(h.lat || h.latitude), lng: Number(h.lng || h.longitude) }))
@@ -444,7 +406,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                     new window.google.maps.Polyline({
                         path: routePath,
                         geodesic: true,
-                        strokeColor: '#3b82f6', // Azul 500
+                        strokeColor: '#3b82f6', 
                         strokeOpacity: 1.0,
                         strokeWeight: 6,
                         map
@@ -453,7 +415,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                 }
             }
 
-            // C) MARCADOR DE UBICACIÓN ACTUAL GPS
             const liveLat = conn.liveLocation?.lat || conn.liveLocation?.latitude;
             const liveLng = conn.liveLocation?.lng || conn.liveLocation?.longitude;
 
@@ -466,7 +427,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                     icon: {
                         path: window.google.maps.SymbolPath.CIRCLE,
                         scale: 8,
-                        fillColor: '#ef4444', // Rojo
+                        fillColor: '#ef4444',
                         fillOpacity: 1,
                         strokeColor: '#ffffff',
                         strokeWeight: 2,
@@ -477,12 +438,11 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                 hasRealRoute = true;
             }
 
-            // A) DIBUJAR RUTA PLANEADA (Línea Gris Punteada)
             const directionsService = new window.google.maps.DirectionsService();
             const directionsRenderer = new window.google.maps.DirectionsRenderer({
                 map,
                 suppressMarkers: false,
-                preserveViewport: hasRealRoute, // No reenfocar automáticamente si ya tenemos la ruta real en pantalla
+                preserveViewport: hasRealRoute, 
                 polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
             });
 
@@ -509,7 +469,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         });
     }, [trackingHistory, post, conn.liveLocation, googleApiKey]);
 
-    // Extraer y procesar Hoja de Ruta para el Top Banner (Horizontal)
     const tl = conn.timeline || {};
     const trackingSteps = [
         { id: 'created', label: "Creado", time: conn.createdAt, icon: FileText },
@@ -527,7 +486,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
             <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
                 
-                {/* Cabecera del Detalle */}
                 <div className="bg-white px-6 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center shrink-0">
                     <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isDisputed ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-600'}`}>
@@ -543,10 +501,8 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                     <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
-                {/* Contenido Principal con Scroll */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col gap-5">
                     
-                    {/* 1. TOP BANNER: HOJA DE RUTA HORIZONTAL */}
                     <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto hide-scrollbar shrink-0">
                         <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Truck size={14}/> Hoja de Ruta</h4>
                         <div className="min-w-[600px] relative px-4 pb-2">
@@ -571,7 +527,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                     </div>
 
-                    {/* 2. PANEL COMPACTO DE DISPUTA Y RESOLUCIÓN */}
                     {isDisputed && (
                         <div className="bg-red-50 border border-red-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
                             <div className="w-full md:flex-1">
@@ -606,13 +561,9 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                     )}
 
-                    {/* 3. COLUMNAS DE DETALLE (ACUERDO, MAPA, CHAT) */}
                     <div className="flex flex-col lg:flex-row gap-5 h-full min-h-[400px]">
                         
-                        {/* Mitad Izquierda: Acuerdo y Mapa */}
                         <div className="w-full lg:w-1/2 flex flex-col gap-5">
-                            
-                            {/* Acuerdo Comercial */}
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
                                 <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
                                 <div className="flex justify-between items-end mb-3">
@@ -630,7 +581,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                 </div>
                             </div>
 
-                            {/* Mapa de Trayecto Real vs Planeado */}
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[300px]">
                                 <div className="flex justify-between items-center mb-4">
                                     <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Trayecto Real</h4>
@@ -654,7 +604,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                             </div>
                         </div>
 
-                        {/* Mitad Derecha: Historial de Chat */}
                         <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-[400px] lg:h-auto">
                             <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                                 <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
@@ -792,7 +741,7 @@ const AdminDashboard = () => {
   // Estados para Modales
   const [editingUser, setEditingUser] = useState(null);
   const [viewingUser, setViewingUser] = useState(null);
-  const [viewingConnection, setViewingConnection] = useState(null); // <-- NUEVO ESTADO PARA DETALLE DE CONEXIÓN
+  const [viewingConnection, setViewingConnection] = useState(null); 
   
   // Estado para capturar errores de índices o permisos
   const [dbError, setDbError] = useState(null);
@@ -808,7 +757,7 @@ const AdminDashboard = () => {
   
   // Estado para Gráficas Analíticas
   const [trendMonthsRange, setTrendMonthsRange] = useState(6);
-  const [resolvingDispute, setResolvingDispute] = useState(null); // Estado para el loader del botón de disputa
+  const [resolvingDispute, setResolvingDispute] = useState(null); 
 
   // --- ESTADOS PARA PAGINACIÓN ---
   const [pageUsers, setPageUsers] = useState(1);
@@ -871,7 +820,6 @@ const AdminDashboard = () => {
     navigate('/');
   };
 
-  // 🔥 NUEVA FUNCIÓN PARA RESOLVER DISPUTAS DESDE EL ADMIN 🔥
   const handleResolveDispute = async (conn, winner) => {
       const winnerText = winner === 'carrier' ? 'TRANSPORTISTA (Se le pagará el viaje)' : 'GENERADOR (Se le reembolsará su dinero)';
       if(!window.confirm(`⚠️ ACCIÓN IRREVERSIBLE ⚠️\n\n¿Confirmas que deseas resolver esta disputa a favor del ${winnerText}?`)) return;
@@ -1005,7 +953,7 @@ const AdminDashboard = () => {
       });
   }, [connections, connsFilter]);
 
-  // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS (MÓDULO ROBUSTO) ---
+  // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS ---
   const stats = useMemo(() => {
       const carriers = users.filter(u => u.role === 'carrier').length;
       const shippers = users.filter(u => u.role === 'shipper').length;
@@ -1015,14 +963,12 @@ const AdminDashboard = () => {
       const completedPubs = allPublications.filter(p => p.status === 'completed').length;
       const pausedPubs = allPublications.filter(p => p.status === 'paused').length;
 
-      // KPI Sostenibilidad
       const completedMatches = connections.filter(c => c.tripStatus === 'completed');
       const kmSavedPerMatch = 450; 
       const co2KgPerKm = 1.05; 
       const totalKmSaved = completedMatches.length * kmSavedPerMatch;
       const totalCo2SavedTons = ((totalKmSaved * co2KgPerKm) / 1000).toFixed(1);
 
-      // --- CÁLCULO DE GRÁFICAS POR MES (TENDENCIAS) ---
       const monthsArray = Array.from({length: trendMonthsRange}, (_, i) => {
           const d = new Date();
           d.setMonth(d.getMonth() - i);
@@ -1033,7 +979,6 @@ const AdminDashboard = () => {
           };
       }).reverse();
 
-      // Función auxiliar para extraer fecha segura
       const getSafeDate = (item) => {
           if (item.createdAt?.seconds) return new Date(item.createdAt.seconds * 1000);
           return new Date(); 
@@ -1043,7 +988,6 @@ const AdminDashboard = () => {
       let maxPubsCategory = 1;
 
       const trendsData = monthsArray.map(m => {
-          // Filtrar Usuarios de este mes
           const mUsers = users.filter(u => {
               const d = getSafeDate(u);
               return d.getMonth() === m.month && d.getFullYear() === m.year;
@@ -1053,7 +997,6 @@ const AdminDashboard = () => {
           if (newCarriers > maxUsersCategory) maxUsersCategory = newCarriers;
           if (newShippers > maxUsersCategory) maxUsersCategory = newShippers;
 
-          // Filtrar Publicaciones de este mes
           const mPubs = allPublications.filter(p => {
               const d = getSafeDate(p);
               return d.getMonth() === m.month && d.getFullYear() === m.year;
@@ -1152,613 +1095,18 @@ const AdminDashboard = () => {
             </div>
         )}
 
-        {/* MÓDULO: RESUMEN Y GRÁFICAS (OVERVIEW) */}
-        {activeTab === 'overview' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                
-                {/* 1. Tarjetas Superiores (Totales Históricos) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                        <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4"><Users size={24}/></div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Total Usuarios</p>
-                        <p className="text-4xl font-black text-slate-800 mt-1">{users.length}</p>
-                        {stats.suspended > 0 && <p className="text-[10px] font-bold text-rose-500 mt-2 flex items-center gap-1 bg-rose-50 w-fit px-2 py-1 rounded"><Ban size={10}/> {stats.suspended} Suspendidos</p>}
-                    </div>
-                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4"><Truck size={24}/></div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Viajes Publicados</p>
-                        <p className="text-4xl font-black text-slate-800 mt-1">{trips.length}</p>
-                    </div>
-                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-4"><Package size={24}/></div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Cargas Disponibles</p>
-                        <p className="text-4xl font-black text-slate-800 mt-1">{loads.length}</p>
-                    </div>
-                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                        <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4"><LinkIcon size={24}/></div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Interacciones</p>
-                        <p className="text-4xl font-black text-slate-800 mt-1">{connections.length}</p>
-                    </div>
-                </div>
-
-                {/* 2. Sección de Impacto Ambiental */}
-                <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-8 rounded-3xl shadow-lg shadow-emerald-600/20 text-white relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-8">
-                    <Leaf size={200} className="absolute -bottom-10 -right-10 opacity-10 pointer-events-none transform rotate-12"/>
-                    <div className="relative z-10 w-full md:w-1/3">
-                        <h3 className="text-sm font-black text-emerald-100 uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <Activity size={18}/> Impacto Real Sostenible
-                        </h3>
-                        <p className="text-sm text-emerald-50 font-medium leading-relaxed">
-                            Al conectar transportistas vacíos con cargas compatibles, Smarfleet reduce la emisión de gases de efecto invernadero en el sector logístico de México.
-                        </p>
-                        <span className="inline-block mt-4 text-[10px] font-bold text-emerald-200 bg-emerald-800/50 px-3 py-1.5 rounded-lg border border-emerald-500/30">
-                            Basado en {stats.completedMatchesCount} viajes completados.
-                        </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-6 relative z-10 w-full md:w-2/3 border-t md:border-t-0 md:border-l border-emerald-500/30 pt-6 md:pt-0 md:pl-8">
-                        <div>
-                            <p className="text-5xl lg:text-6xl font-black tracking-tighter">{stats.totalKmSaved.toLocaleString()}</p>
-                            <p className="text-sm font-bold text-emerald-200 mt-2 uppercase tracking-wide">Km. Vacíos Evitados</p>
-                        </div>
-                        <div>
-                            <p className="text-5xl lg:text-6xl font-black tracking-tighter">{stats.totalCo2SavedTons}</p>
-                            <p className="text-sm font-bold text-emerald-200 mt-2 uppercase tracking-wide">Toneladas CO₂ Mitigadas</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 3. PANEL DE GRÁFICAS DE TENDENCIAS (NUEVO) */}
-                <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
-                    {/* Controles del Dashboard */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10 relative z-10">
-                        <div>
-                            <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                                <TrendingUp className="text-blue-600"/> Rendimiento y Tracción de Plataforma
-                            </h3>
-                            <p className="text-xs text-slate-500 font-medium mt-1">Análisis de crecimiento de cuentas y volumen de publicaciones.</p>
-                        </div>
-                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                            <button onClick={() => setTrendMonthsRange(3)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${trendMonthsRange === 3 ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>3 Meses</button>
-                            <button onClick={() => setTrendMonthsRange(6)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${trendMonthsRange === 6 ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>6 Meses</button>
-                            <button onClick={() => setTrendMonthsRange(12)} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${trendMonthsRange === 12 ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>1 Año</button>
-                        </div>
-                    </div>
-
-                    <div className="grid lg:grid-cols-2 gap-12 relative z-10">
-                        
-                        {/* Gráfica A: Crecimiento de Usuarios */}
-                        <div className="space-y-6">
-                            <div className="flex justify-between items-end">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Users size={14}/> Nuevas Cuentas (Mensual)</h4>
-                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600">
-                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-indigo-500"></div> Transportistas</span>
-                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></div> Generadores</span>
-                                </div>
-                            </div>
-                            
-                            <div className="h-56 w-full flex items-end gap-2 md:gap-4 relative">
-                                {/* Líneas de fondo (Eje Y) */}
-                                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
-                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{stats.maxUsersCategory}</span></div>
-                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{Math.round(stats.maxUsersCategory/2)}</span></div>
-                                    <div className="border-b border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">0</span></div>
-                                </div>
-
-                                {/* Barras Dinámicas */}
-                                <div className="absolute inset-0 flex items-end gap-2 md:gap-4 ml-2 pb-8">
-                                    {stats.trendsData.map((data, idx) => (
-                                        <div key={idx} className="flex-1 flex items-end justify-center gap-1 h-full relative group">
-                                            
-                                            {/* Tooltip Hover */}
-                                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-xl">
-                                                {data.label}: {data.totalNewUsers} Usuarios
-                                                <div className="text-[9px] font-normal text-slate-300 mt-1">{data.newCarriers} Transp. / {data.newShippers} Generadores</div>
-                                            </div>
-
-                                            {/* Barra Transp */}
-                                            <div 
-                                                className="w-1/2 bg-indigo-500 rounded-t-md hover:bg-indigo-400 transition-all duration-500" 
-                                                style={{ height: `${(data.newCarriers / stats.maxUsersCategory) * 100}%`, minHeight: data.newCarriers > 0 ? '4px' : '0' }}>
-                                            </div>
-                                            {/* Barra Generador */}
-                                            <div 
-                                                className="w-1/2 bg-emerald-500 rounded-t-md hover:bg-emerald-400 transition-all duration-500" 
-                                                style={{ height: `${(data.newShippers / stats.maxUsersCategory) * 100}%`, minHeight: data.newShippers > 0 ? '4px' : '0' }}>
-                                            </div>
-
-                                            {/* Etiqueta Eje X */}
-                                            <span className="absolute -bottom-6 text-[9px] font-black text-slate-500 tracking-wider w-full text-center truncate">{data.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Gráfica B: Crecimiento de Publicaciones */}
-                        <div className="space-y-6">
-                            <div className="flex justify-between items-end">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Package size={14}/> Nuevo Inventario (Mensual)</h4>
-                                <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600">
-                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-500"></div> Viajes</span>
-                                    <span className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-500"></div> Cargas</span>
-                                </div>
-                            </div>
-                            
-                            <div className="h-56 w-full flex items-end gap-2 md:gap-4 relative">
-                                {/* Líneas de fondo (Eje Y) */}
-                                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none pb-8">
-                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{stats.maxPubsCategory}</span></div>
-                                    <div className="border-b border-dashed border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">{Math.round(stats.maxPubsCategory/2)}</span></div>
-                                    <div className="border-b border-slate-200 w-full h-0 relative"><span className="absolute -left-6 -top-2.5 text-[9px] text-slate-400">0</span></div>
-                                </div>
-
-                                {/* Barras Dinámicas */}
-                                <div className="absolute inset-0 flex items-end gap-2 md:gap-4 ml-2 pb-8">
-                                    {stats.trendsData.map((data, idx) => (
-                                        <div key={idx} className="flex-1 flex items-end justify-center gap-1 h-full relative group">
-                                            
-                                            {/* Tooltip Hover */}
-                                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-3 py-2 rounded-lg font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 whitespace-nowrap shadow-xl">
-                                                {data.label}: {data.totalNewPubs} Publicaciones
-                                                <div className="text-[9px] font-normal text-slate-300 mt-1">{data.newTrips} Viajes / {data.newLoads} Cargas</div>
-                                            </div>
-
-                                            {/* Barra Viajes */}
-                                            <div 
-                                                className="w-1/2 bg-blue-500 rounded-t-md hover:bg-blue-400 transition-all duration-500" 
-                                                style={{ height: `${(data.newTrips / stats.maxPubsCategory) * 100}%`, minHeight: data.newTrips > 0 ? '4px' : '0' }}>
-                                            </div>
-                                            {/* Barra Cargas */}
-                                            <div 
-                                                className="w-1/2 bg-amber-500 rounded-t-md hover:bg-amber-400 transition-all duration-500" 
-                                                style={{ height: `${(data.newLoads / stats.maxPubsCategory) * 100}%`, minHeight: data.newLoads > 0 ? '4px' : '0' }}>
-                                            </div>
-
-                                            {/* Etiqueta Eje X */}
-                                            <span className="absolute -bottom-6 text-[9px] font-black text-slate-500 tracking-wider w-full text-center truncate">{data.label}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-
-            </div>
-        )}
-
-        {/* 🔥 MÓDULO: NOTIFICACIONES GLOBALES (BROADCAST) 🔥 */}
-        {activeTab === 'notifications' && !dbError && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                 
-                 <div className="grid lg:grid-cols-2 gap-8">
-                     
-                     {/* Formulario de Envío */}
-                     <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden">
-                          <Megaphone size={160} className="absolute -right-8 -bottom-10 text-slate-50 pointer-events-none"/>
-                          <div className="relative z-10">
-                              <h3 className="font-black text-2xl text-slate-800 mb-2">Centro de Difusión</h3>
-                              <p className="text-slate-500 text-sm mb-8">Envía un aviso oficial que aparecerá en el panel de notificaciones de todos los usuarios activos.</p>
-
-                              <form onSubmit={handleSendGlobalNotification} className="space-y-6">
-                                   <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Tipo de Alerta</label>
-                                        <select 
-                                            value={notifForm.type} 
-                                            onChange={e => setNotifForm({...notifForm, type: e.target.value})} 
-                                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all cursor-pointer"
-                                        >
-                                            <option value="info">ℹ️ Aviso Informativo</option>
-                                            <option value="warning">⚠️ Mantenimiento o Alerta</option>
-                                            <option value="success">🎉 Promoción / Novedad</option>
-                                        </select>
-                                   </div>
-                                   
-                                   <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Título del Mensaje</label>
-                                        <input 
-                                            required 
-                                            type="text" 
-                                            placeholder="Ej. Actualización del Sistema v2.0" 
-                                            value={notifForm.title} 
-                                            onChange={e => setNotifForm({...notifForm, title: e.target.value})} 
-                                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all" 
-                                        />
-                                   </div>
-                                   
-                                   <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Contenido Detallado</label>
-                                        <textarea 
-                                            required 
-                                            rows="5" 
-                                            placeholder="Escribe aquí el detalle completo para los usuarios..." 
-                                            value={notifForm.message} 
-                                            onChange={e => setNotifForm({...notifForm, message: e.target.value})} 
-                                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all resize-none"
-                                        ></textarea>
-                                   </div>
-                                   
-                                   <button 
-                                       type="submit" 
-                                       disabled={sendingNotif || users.filter(u => !u.isSuspended).length === 0} 
-                                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm py-4 px-8 rounded-xl shadow-xl shadow-indigo-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                   >
-                                       {sendingNotif ? (
-                                           <>Enviando... por favor espera</>
-                                       ) : (
-                                           <><Send size={18}/> Enviar a {users.filter(u => !u.isSuspended).length} usuarios activos</>
-                                       )}
-                                   </button>
-                              </form>
-                          </div>
-                     </div>
-
-                     {/* Panel Lateral: Vista Previa */}
-                     <div className="flex flex-col gap-6">
-                         <div className="bg-slate-100 p-8 rounded-3xl border border-slate-200 flex-1 flex flex-col justify-center items-center relative shadow-inner">
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 absolute top-6 left-1/2 -translate-x-1/2">
-                                 Vista Previa del Usuario
-                             </p>
-                             
-                             {/* Tarjeta de Notificación Simulada */}
-                             <div className={`w-full max-w-sm p-5 rounded-2xl shadow-md border flex items-start gap-4 transition-all duration-300 ${
-                                 notifForm.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-900' : 
-                                 notifForm.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 
-                                 'bg-blue-50 border-blue-200 text-blue-900'
-                             }`}>
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                                      notifForm.type === 'warning' ? 'bg-amber-200 text-amber-700' : 
-                                      notifForm.type === 'success' ? 'bg-emerald-200 text-emerald-700' : 
-                                      'bg-blue-200 text-blue-700'
-                                  }`}>
-                                       {notifForm.type === 'warning' ? <AlertTriangle size={20}/> : 
-                                        notifForm.type === 'success' ? <CheckCircle size={20}/> : 
-                                        <Info size={20}/>}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                       <div className="flex justify-between items-start gap-2">
-                                            <h4 className="font-black text-sm leading-tight">{notifForm.title || 'Título del Mensaje'}</h4>
-                                            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1"></span>
-                                       </div>
-                                       <p className="text-xs mt-2 opacity-80 leading-relaxed font-medium">
-                                           {notifForm.message || 'El contenido de tu anuncio aparecerá aquí y podrá ser leído por todos los usuarios en su centro de notificaciones personal.'}
-                                       </p>
-                                       <p className="text-[9px] font-bold opacity-50 mt-3 uppercase tracking-widest">
-                                           Smarfleet Admin • Ahora
-                                       </p>
-                                  </div>
-                             </div>
-                         </div>
-                     </div>
-
-                 </div>
-            </div>
-        )}
-
-        {/* MÓDULO: USUARIOS */}
-        {activeTab === 'users' && !dbError && (
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <Users size={18} className="text-blue-600"/> Directorio de Usuarios 
-                        <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full">{filteredUsers.length}</span>
-                    </h3>
-                    
-                    {/* BARRA DE FILTROS */}
-                    <div className="flex flex-col sm:flex-row w-full md:w-auto gap-2">
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                            <input 
-                                type="text" 
-                                placeholder="Buscar por email, empresa..." 
-                                className="w-full sm:w-64 pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-colors"
-                                value={usersFilter.search}
-                                onChange={e => setUsersFilter({...usersFilter, search: e.target.value})}
-                            />
-                        </div>
-                        <select 
-                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
-                            value={usersFilter.status}
-                            onChange={e => setUsersFilter({...usersFilter, status: e.target.value})}
-                        >
-                            <option value="all">Estado: Todos</option>
-                            <option value="active">Activos</option>
-                            <option value="suspended">Suspendidos</option>
-                        </select>
-                        <select 
-                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
-                            value={usersFilter.role}
-                            onChange={e => setUsersFilter({...usersFilter, role: e.target.value})}
-                        >
-                            <option value="all">Rol: Todos</option>
-                            <option value="carrier">Transportistas</option>
-                            <option value="shipper">Generadores</option>
-                        </select>
-                        <select 
-                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
-                            value={usersFilter.tier}
-                            onChange={e => setUsersFilter({...usersFilter, tier: e.target.value})}
-                        >
-                            <option value="all">Plan: Todos</option>
-                            <option value="premium">Premium</option>
-                            <option value="free">Free</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-white border-b border-slate-100">
-                            <tr>
-                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Empresa</th>
-                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Rol</th>
-                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Plan</th>
-                                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {pagedUsers.length > 0 ? pagedUsers.map(u => {
-                                const expDate = u.subscriptionEndsAt?.seconds 
-                                    ? new Date(u.subscriptionEndsAt.seconds * 1000).toLocaleDateString() 
-                                    : (u.currentPeriodEnd?.seconds ? new Date(u.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
-
-                                return (
-                                <tr key={u.id} className={`transition-colors ${u.isSuspended ? 'bg-rose-50/30 hover:bg-rose-50/50' : 'hover:bg-slate-50/50'}`}>
-                                    <td className="p-5">
-                                        <div className="flex items-center gap-2">
-                                            {u.isAdmin && <Shield size={14} className="text-blue-500" title="Administrador"/>}
-                                            <p className={`font-bold ${u.isSuspended ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{u.businessName || 'Sin nombre'}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <p className="text-xs text-slate-500 font-medium">{u.email || u.id}</p>
-                                            {u.isSuspended && <span className="bg-rose-100 text-rose-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Ban size={8}/> Suspendido</span>}
-                                        </div>
-                                    </td>
-                                    <td className="p-5">
-                                        <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${u.role === 'carrier' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'} ${u.isSuspended ? 'opacity-50' : ''}`}>
-                                            {u.role === 'carrier' ? 'Transportista' : 'Generador'}
-                                        </span>
-                                    </td>
-                                    <td className="p-5">
-                                        {u.tier === 'premium' ? (
-                                            <div className="flex flex-col gap-1.5">
-                                                <span className={`flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1 rounded-lg w-max ${u.isSuspended ? 'opacity-50' : ''}`}><AlertTriangle size={12}/> Premium</span>
-                                                <span className={`text-[9px] font-bold text-slate-400 uppercase tracking-widest ${u.isSuspended ? 'opacity-50' : ''}`}>Vence: {expDate}</span>
-                                            </div>
-                                        ) : (
-                                            <span className={`text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg ${u.isSuspended ? 'opacity-50' : ''}`}>Free</span>
-                                        )}
-                                    </td>
-                                    <td className="p-5 text-right flex items-center justify-end gap-2">
-                                        <button onClick={() => setViewingUser(u)} className={`px-4 py-2 border text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 ${u.isSuspended ? 'bg-white border-rose-200 text-rose-600 hover:bg-rose-50' : 'bg-white border-slate-200 text-slate-700 hover:text-purple-600 hover:border-purple-300 hover:bg-purple-50'}`}>
-                                            <Eye size={14}/> Detalles
-                                        </button>
-                                        <button onClick={() => setEditingUser(u)} className={`px-4 py-2 border text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 ${u.isSuspended ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 hover:border-rose-300' : 'bg-white border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50'}`}>
-                                            <Edit size={14}/> Editar
-                                        </button>
-                                    </td>
-                                </tr>
-                                );
-                            }) : (
-                                <tr>
-                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No se encontraron usuarios con esos filtros.</td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-                <Pagination currentPage={pageUsers} totalItems={filteredUsers.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPageUsers} />
-            </div>
-        )}
-
-        {/* MÓDULO: PUBLICACIONES (Mercado Global) */}
-        {activeTab === 'publications' && !dbError && (
-             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                 <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <Package size={18} className="text-emerald-600"/> Publicaciones Globales
-                        <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full">{filteredPubs.length}</span>
-                    </h3>
-
-                    {/* BARRA DE FILTROS */}
-                    <div className="flex flex-col sm:flex-row w-full md:w-auto gap-2">
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                            <input 
-                                type="text" 
-                                placeholder="Buscar ciudad, ID, empresa..." 
-                                className="w-full sm:w-64 pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-blue-500 transition-colors"
-                                value={pubsFilter.search}
-                                onChange={e => setPubsFilter({...pubsFilter, search: e.target.value})}
-                            />
-                        </div>
-                        <select 
-                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
-                            value={pubsFilter.type}
-                            onChange={e => setPubsFilter({...pubsFilter, type: e.target.value})}
-                        >
-                            <option value="all">Tipo (Todos)</option>
-                            <option value="trip">Viajes (Camiones)</option>
-                            <option value="load">Cargas</option>
-                        </select>
-                        <select 
-                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-blue-500"
-                            value={pubsFilter.status}
-                            onChange={e => setPubsFilter({...pubsFilter, status: e.target.value})}
-                        >
-                            <option value="all">Estado (Todos)</option>
-                            <option value="active">Activas</option>
-                            <option value="paused">Pausadas</option>
-                            <option value="completed">Completadas</option>
-                        </select>
-                    </div>
-                 </div>
-
-                 <div className="overflow-x-auto">
-                     <table className="w-full text-left">
-                         <thead className="bg-white border-b border-slate-100">
-                             <tr>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo / Empresa</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ruta (Origen - Destino)</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha / Estatus</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-                             </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-100">
-                             {pagedPubs.length > 0 ? pagedPubs.map(pub => (
-                                 <tr key={pub.id} className="hover:bg-slate-50/50 transition-colors">
-                                     <td className="p-5">
-                                         <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider mb-1.5 border ${pub.type === 'trip' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
-                                             {pub.type === 'trip' ? 'Viaje' : 'Carga'}
-                                         </span>
-                                         <p className="font-bold text-slate-800 text-sm">{pub.company}</p>
-                                         <p className="text-[10px] text-slate-500 font-mono mt-0.5 bg-slate-100 px-1.5 py-0.5 rounded w-max">ID: {pub.customId || pub.id.substring(0,6)}</p>
-                                     </td>
-                                     <td className="p-5">
-                                         <p className="font-bold text-slate-800 text-sm">{pub.originCity || pub.originState}</p>
-                                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                                            <MapPin size={10} className="text-slate-400"/> {pub.destinationCity || pub.destinationState}
-                                         </p>
-                                     </td>
-                                     <td className="p-5">
-                                         <p className="font-bold text-slate-800 text-xs flex items-center gap-1"><Calendar size={12} className="text-blue-500"/> {pub.date || 'Fija'}</p>
-                                         <p className="text-[9px] font-bold text-slate-500 flex items-center gap-1 mt-1"><Clock size={10}/> Creado: {safeDateStr(pub.createdAt)}</p>
-                                         <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold border ${pub.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : pub.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                                            {pub.status === 'active' ? 'ACTIVA' : pub.status.toUpperCase()}
-                                         </span>
-                                     </td>
-                                     <td className="p-5 text-right">
-                                         <button onClick={() => handleDeletePublication(pub.id, pub.type)} className="p-2.5 bg-white border border-rose-200 text-rose-500 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-colors shadow-sm ml-auto" title="Borrar Publicación">
-                                             <Trash2 size={16}/>
-                                         </button>
-                                     </td>
-                                 </tr>
-                             )) : (
-                                <tr>
-                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No se encontraron publicaciones.</td>
-                                </tr>
-                             )}
-                         </tbody>
-                     </table>
-                 </div>
-                 <Pagination currentPage={pagePubs} totalItems={filteredPubs.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPagePubs} />
-             </div>
-        )}
-
-        {/* MÓDULO: CONEXIONES (Matches, Tracking y DISPUTAS) */}
-        {activeTab === 'connections' && !dbError && (
-             <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-                 <div className="p-5 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <LinkIcon size={18} className="text-purple-600"/> Tracking y Resolución de Disputas
-                        <span className="bg-purple-100 text-purple-700 text-[10px] px-2 py-0.5 rounded-full">{filteredConns.length}</span>
-                    </h3>
-
-                     {/* BARRA DE FILTROS ACTUALIZADA PARA DISPUTAS */}
-                     <div className="flex flex-col sm:flex-row w-full md:w-auto gap-2">
-                        <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-                            <input 
-                                type="text" 
-                                placeholder="Buscar empresa o ID..." 
-                                className="w-full sm:w-64 pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500 transition-colors"
-                                value={connsFilter.search}
-                                onChange={e => setConnsFilter({...connsFilter, search: e.target.value})}
-                            />
-                        </div>
-                        <select 
-                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 outline-none focus:border-purple-500"
-                            value={connsFilter.status}
-                            onChange={e => setConnsFilter({...connsFilter, status: e.target.value})}
-                        >
-                            <option value="all">Cualquier Estatus</option>
-                            <option value="disputed">⚠️ EN DISPUTA</option>
-                            <option value="pending">Solicitud Pendiente</option>
-                            <option value="accepted">Aceptada / En Contacto</option>
-                            <option value="confirmed">Viaje Confirmado</option>
-                            <option value="completed">Completado</option>
-                            <option value="terminated">Cancelado</option>
-                        </select>
-                    </div>
-                 </div>
-                 
-                 <div className="overflow-x-auto">
-                     <table className="w-full text-left">
-                         <thead className="bg-white border-b border-slate-100">
-                             <tr>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Participantes</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estatus / Pago</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Disputa / Detalles</th>
-                                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-                             </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-100">
-                             {pagedConns.length > 0 ? pagedConns.map(conn => {
-                                 const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
-                                 
-                                 return (
-                                 <tr key={conn.id} className={`transition-colors ${isDisputed ? 'bg-red-50/30' : 'hover:bg-slate-50/50'}`}>
-                                     <td className="p-5">
-                                         <p className="text-xs font-bold text-blue-600 mb-1.5 flex items-center gap-1.5"><MapPin size={12}/> De: <span className="text-slate-800">{conn.fromName}</span></p>
-                                         <p className="text-xs font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle size={12}/> Para: <span className="text-slate-800">{conn.toName}</span></p>
-                                         <div className="flex flex-wrap items-center gap-2 mt-2">
-                                            <span className="text-[9px] text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">Ref: {conn.id.substring(0,8)}</span>
-                                            <span className="text-[9px] font-bold text-slate-500 flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100"><Clock size={10}/> {safeDateStr(conn.createdAt)}</span>
-                                         </div>
-                                     </td>
-                                     <td className="p-5">
-                                         {isDisputed ? (
-                                             <span className="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border bg-red-100 text-red-700 border-red-200 flex items-center gap-1 w-max">
-                                                 <AlertTriangle size={12}/> EN DISPUTA
-                                             </span>
-                                         ) : (
-                                             <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${conn.tripStatus === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-200' : conn.tripStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                                                {conn.tripStatus ? conn.tripStatus.toUpperCase() : (conn.status === 'accepted' ? 'ACEPTADA' : 'PENDIENTE')}
-                                             </span>
-                                         )}
-                                         {conn.paymentStatus === 'funded' && <p className="text-[9px] font-black text-indigo-600 mt-2 flex items-center gap-1"><ShieldCheck size={10}/> PAGO SEGURO RETENIDO</p>}
-                                     </td>
-                                     <td className="p-5">
-                                         {isDisputed ? (
-                                             <div className="text-xs">
-                                                 <p className="font-bold text-red-800 mb-1">Motivo: <span className="font-medium text-red-600">{conn.disputeDetails?.reason || 'No especificado'}</span></p>
-                                                 <p className="text-[9px] text-red-500">Abierta por: {conn.disputeDetails?.openedByName || 'Usuario'}</p>
-                                             </div>
-                                         ) : (
-                                             <span className="text-xs font-medium text-slate-400">Sin incidencias</span>
-                                         )}
-                                     </td>
-                                     <td className="p-5 text-right">
-                                         <div className="flex flex-col gap-2 w-max ml-auto">
-                                            <button onClick={() => setViewingConnection(conn)} className="px-4 py-2 border text-xs font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 bg-white border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50">
-                                                <Eye size={14}/> Ver Detalles y Chat
-                                            </button>
-                                         </div>
-                                     </td>
-                                 </tr>
-                                 );
-                             }) : (
-                                <tr>
-                                    <td colSpan="4" className="p-10 text-center text-slate-500 font-medium">No hay conexiones que coincidan con la búsqueda.</td>
-                                </tr>
-                             )}
-                         </tbody>
-                     </table>
-                 </div>
-                 <Pagination currentPage={pageConns} totalItems={filteredConns.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setPageConns} />
-             </div>
-        )}
+        {/* RENDERIZADO MODULAR DE PESTAÑAS */}
+        {activeTab === 'overview' && <OverviewTab stats={stats} users={users} trips={trips} loads={loads} connections={connections} trendMonthsRange={trendMonthsRange} setTrendMonthsRange={setTrendMonthsRange} />}
+        {activeTab === 'notifications' && <NotificationsTab notifForm={notifForm} setNotifForm={setNotifForm} handleSendGlobalNotification={handleSendGlobalNotification} sendingNotif={sendingNotif} users={users} />}
+        {activeTab === 'users' && <UsersTab usersFilter={usersFilter} setUsersFilter={setUsersFilter} filteredUsers={filteredUsers} pagedUsers={pagedUsers} pageUsers={pageUsers} setPageUsers={setPageUsers} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingUser={setViewingUser} setEditingUser={setEditingUser} />}
+        {activeTab === 'publications' && <PublicationsTab pubsFilter={pubsFilter} setPubsFilter={setPubsFilter} filteredPubs={filteredPubs} pagedPubs={pagedPubs} pagePubs={pagePubs} setPagePubs={setPagePubs} ITEMS_PER_PAGE={ITEMS_PER_PAGE} handleDeletePublication={handleDeletePublication} safeDateStr={safeDateStr} />}
+        {activeTab === 'connections' && <ConnectionsTab connsFilter={connsFilter} setConnsFilter={setConnsFilter} filteredConns={filteredConns} pagedConns={pagedConns} pageConns={pageConns} setPageConns={setPageConns} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingConnection={setViewingConnection} safeDateStr={safeDateStr} />}
 
       </main>
     </div>
   );
 };
 
-// ============================================================================
-// --- APP PRINCIPAL Y ENRUTAMIENTO ---
-// ============================================================================
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
