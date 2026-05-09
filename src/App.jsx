@@ -8,7 +8,6 @@ import {
   Bell, Megaphone, Send, Info, ChevronLeft, ShieldCheck, RotateCcw, MessageCircle,
   DollarSign, HeartHandshake, Clock
 } from 'lucide-react';
-import { GoogleMap, DirectionsRenderer, useJsApiLoader } from '@react-google-maps/api';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 import { initializeApp } from 'firebase/app';
@@ -33,8 +32,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
-
-const LIBRARIES = ['places'];
 
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
@@ -398,7 +395,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             const unique = [];
             const seen = new Set();
             combined.forEach(item => {
-                // Aceptamos lat/lng o latitude/longitude dependiendo de cómo se guardó
+                // Aceptamos lat/lng o latitude/longitude
                 const lat = item.lat || item.latitude;
                 const lng = item.lng || item.longitude;
                 if(lat !== undefined && lng !== undefined) {
@@ -413,7 +410,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             setTrackingHistory(unique);
         }, (err) => {
             console.warn("Aviso: No se cargó trackingLogs (posible falta de índice). Usando fallback.", err);
-            // Fallback en caso de que falte el índice en Firebase
             if (conn.trackingHistory && Array.isArray(conn.trackingHistory)) {
                 setTrackingHistory(conn.trackingHistory);
             }
@@ -500,7 +496,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                     travelMode: window.google.maps.TravelMode.DRIVING,
                 }).then(response => {
                     directionsRenderer.setDirections(response);
-                    // Si tenemos una ruta real, forzamos la cámara a enfocarse en ella (y no en la planeada)
                     if (hasRealRoute) {
                         map.fitBounds(realRouteBounds);
                     }
