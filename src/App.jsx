@@ -8,7 +8,6 @@ import {
 } from 'lucide-react';
 
 // --- IMPORTACIONES DE TUS COMPONENTES MODULARIZADOS ---
-// Asegúrate de que estos 5 archivos existan en src/Components/Admin/
 import { OverviewTab } from './Components/Admin/OverviewTab';
 import { NotificationsTab } from './Components/Admin/NotificationsTab';
 import { UsersTab } from './Components/Admin/UsersTab';
@@ -38,8 +37,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
-
-const LIBRARIES = ['places'];
 
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
@@ -380,11 +377,16 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, conn.trackingHistory]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (CORRECCIÓN DE ALTURA Y LIMPIEZA)
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
         loadGoogleMapsScript(googleApiKey, () => {
+            if (!mapRef.current) return;
+
+            // Limpiamos el contenedor para evitar sobreescritura de instancias de Google Maps
+            mapRef.current.innerHTML = '';
+            
             const map = new window.google.maps.Map(mapRef.current, {
                 zoom: 5,
                 center: { lat: 23.6345, lng: -102.5528 }, 
@@ -398,7 +400,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             if (trackingHistory.length > 0) {
                 const routePath = trackingHistory
                     .map(h => ({ lat: Number(h.lat || h.latitude), lng: Number(h.lng || h.longitude) }))
-                    .filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+                    .filter(p => !isNaN(p.lat) && !isNaN(p.lng) && p.lat !== 0 && p.lng !== 0);
 
                 if (routePath.length > 0) {
                     hasRealRoute = true;
@@ -437,18 +439,19 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                 hasRealRoute = true;
             }
 
-            const directionsService = new window.google.maps.DirectionsService();
-            const directionsRenderer = new window.google.maps.DirectionsRenderer({
-                map,
-                suppressMarkers: false,
-                preserveViewport: hasRealRoute, 
-                polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
-            });
-
+            // Calculamos ruta planeada, permitiendo fallback si "post" fue eliminado de trips/loads
             const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
             const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
 
             if (originStr && destStr) {
+                const directionsService = new window.google.maps.DirectionsService();
+                const directionsRenderer = new window.google.maps.DirectionsRenderer({
+                    map,
+                    suppressMarkers: false,
+                    preserveViewport: hasRealRoute, // Si ya tenemos ruta azul, no reenfocamos hacia la gris
+                    polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
+                });
+
                 directionsService.route({
                     origin: originStr,
                     destination: destStr,
@@ -459,7 +462,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         map.fitBounds(realRouteBounds);
                     }
                 }).catch(e => {
-                    console.warn("No se pudo calcular la ruta planeada", e);
+                    console.warn("No se pudo calcular la ruta planeada gris", e);
                     if (hasRealRoute) map.fitBounds(realRouteBounds);
                 });
             } else if (hasRealRoute) {
@@ -563,6 +566,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                     <div className="flex flex-col lg:flex-row gap-5 h-full min-h-[400px]">
                         
                         <div className="w-full lg:w-1/2 flex flex-col gap-5">
+                            
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
                                 <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
                                 <div className="flex justify-between items-end mb-3">
@@ -592,7 +596,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
 
                                 <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[250px]">
                                     {googleApiKey ? (
-                                        <div ref={mapRef} className="w-full h-full"></div>
+                                        <div ref={mapRef} style={{ width: '100%', minHeight: '300px', height: '100%' }} className="absolute inset-0"></div>
                                     ) : (
                                         <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-slate-50">
                                             <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
@@ -674,7 +678,7 @@ const AdminLogin = () => {
              const data = profileSnap.data();
              
              if (data.isAdmin === true || String(data.isAdmin).toLowerCase() === "true") {
-                 // Éxito, el componente App redirigirá automáticamente
+                 // Éxito
              } else {
                  await signOut(auth);
                  let errorMsg = `Acceso denegado. `;
