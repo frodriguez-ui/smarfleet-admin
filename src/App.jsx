@@ -55,7 +55,7 @@ const formatMessageTime = (ts) => {
     return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 };
 
-// 🌟 CARGADOR NATIVO CON MANEJO DE ERRORES (PROMESAS) 🌟
+// 🌟 CARGADOR NATIVO DE GOOGLE MAPS CON MANEJO DE PROMESAS 🌟
 let googleMapsPromise = null;
 
 const loadGoogleMapsScript = (apiKey) => {
@@ -64,7 +64,6 @@ const loadGoogleMapsScript = (apiKey) => {
     
     if (!googleMapsPromise) {
         googleMapsPromise = new Promise((resolve, reject) => {
-            // Atrapador de errores de autenticación de Google Maps
             window.gm_authFailure = () => {
                 console.error("Fallo de Autenticación de Google Maps detectado.");
                 reject(new Error("auth_failure"));
@@ -94,7 +93,6 @@ const loadGoogleMapsScript = (apiKey) => {
 // --- COMPONENTES MODULARES (MODALES) ---
 // ============================================================================
 
-// 1. MODAL DE EDICIÓN
 const EditUserModal = ({ user, onClose }) => {
     const [formData, setFormData] = useState({ ...user });
     const [loading, setLoading] = useState(false);
@@ -192,7 +190,6 @@ const EditUserModal = ({ user, onClose }) => {
     );
 };
 
-// 2. MODAL DE DETALLE (DRILL-DOWN)
 const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) => {
     const userPubs = useMemo(() => {
         return [...allTrips, ...allLoads]
@@ -337,7 +334,6 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
     );
 };
 
-// 3. MODAL DE DETALLE DE CONEXIÓN Y CHAT (EXCLUSIVO ADMIN)
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
     const [trackingHistory, setTrackingHistory] = useState([]);
@@ -391,15 +387,17 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         });
 
         return () => { unsubMsg(); unsubTrack(); };
-    }, [conn.id, conn.trackingHistory]);
+    }, [conn.id, JSON.stringify(conn.trackingHistory)]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (CORRECCIÓN CON PROMESAS)
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (CORRECCIÓN FINAL)
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
+        let isMounted = true;
+
         loadGoogleMapsScript(googleApiKey)
             .then(() => {
-                if (!mapRef.current) return;
+                if (!isMounted || !mapRef.current) return;
                 mapRef.current.innerHTML = '';
                 setMapError(false);
                 
@@ -486,8 +484,10 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             })
             .catch((err) => {
                 console.error("Error al cargar Google Maps:", err);
-                setMapError(true);
+                if (isMounted) setMapError(true);
             });
+
+        return () => { isMounted = false; };
     }, [trackingHistory, post, conn.liveLocation, googleApiKey]);
 
     const tl = conn.timeline || {};
