@@ -337,7 +337,7 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
     const [trackingHistory, setTrackingHistory] = useState([]);
-    const [connReports, setConnReports] = useState([]); // 🌟 NUEVO ESTADO PARA REPORTES
+    const [connReports, setConnReports] = useState([]); // 🌟 ESTADO PARA REPORTES
     const [isLoadingChat, setIsLoadingChat] = useState(true);
     const [mapError, setMapError] = useState(false);
     const mapRef = useRef(null);
@@ -599,7 +599,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                     )}
 
-                    {/* 🌟 NUEVO: Reportes de Usuarios 🌟 */}
+                    {/* 🌟 Reportes de Usuarios 🌟 */}
                     {connReports.length > 0 && (
                         <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl shadow-sm flex flex-col items-start justify-between gap-4 shrink-0">
                             <div className="w-full">
@@ -803,6 +803,7 @@ const AdminDashboard = () => {
   const [trips, setTrips] = useState([]);
   const [loads, setLoads] = useState([]);
   const [connections, setConnections] = useState([]);
+  const [reports, setReports] = useState([]); // 🌟 ESTADO GLOBAL DE REPORTES
   
   // Estados para Modales
   const [editingUser, setEditingUser] = useState(null);
@@ -878,7 +879,13 @@ const AdminDashboard = () => {
         (error) => { if (error.code === 'permission-denied') setDbError("Permiso denegado al leer Conexiones. Revisa las reglas de Firestore."); }
     );
 
-    return () => { unsubUsers(); unsubTrips(); unsubLoads(); unsubConns(); };
+    // 5. Reportes (Denuncias)
+    const qReports = query(collection(db, 'artifacts', projectId, 'public', 'data', 'reports'));
+    const unsubReports = onSnapshot(qReports, s => setReports(s.docs.map(d => ({id: d.id, ...d.data()}))),
+        (error) => { if (error.code === 'permission-denied') setDbError("Permiso denegado al leer Reportes. Revisa las reglas de Firestore."); }
+    );
+
+    return () => { unsubUsers(); unsubTrips(); unsubLoads(); unsubConns(); unsubReports(); };
   }, []);
 
   const handleLogout = async () => {
@@ -1032,11 +1039,17 @@ const AdminDashboard = () => {
           let targetStatus = c.tripStatus || c.status;
           if (c.isDisputed === true || c.tripStatus === 'disputed') targetStatus = 'disputed'; 
 
+          const hasReports = reports.some(r => r.context === `Tracking Viaje: ${c.id}`);
+
+          if (connsFilter.status === 'reported') {
+              return matchesSearch && hasReports;
+          }
+
           const matchesStatus = connsFilter.status === 'all' || targetStatus === connsFilter.status;
 
           return matchesSearch && matchesStatus;
       });
-  }, [connections, connsFilter, allPublications]);
+  }, [connections, connsFilter, allPublications, reports]);
 
   // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS ---
   const stats = useMemo(() => {
@@ -1185,7 +1198,7 @@ const AdminDashboard = () => {
         {activeTab === 'notifications' && <NotificationsTab notifForm={notifForm} setNotifForm={setNotifForm} handleSendGlobalNotification={handleSendGlobalNotification} sendingNotif={sendingNotif} users={users} />}
         {activeTab === 'users' && <UsersTab usersFilter={usersFilter} setUsersFilter={setUsersFilter} filteredUsers={filteredUsers} pagedUsers={pagedUsers} pageUsers={pageUsers} setPageUsers={setPageUsers} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingUser={setViewingUser} setEditingUser={setEditingUser} handleDeleteUser={handleDeleteUser} safeDateStr={safeDateStr} />}
         {activeTab === 'publications' && <PublicationsTab pubsFilter={pubsFilter} setPubsFilter={setPubsFilter} filteredPubs={filteredPubs} pagedPubs={pagedPubs} pagePubs={pagePubs} setPagePubs={setPagePubs} ITEMS_PER_PAGE={ITEMS_PER_PAGE} handleDeletePublication={handleDeletePublication} safeDateStr={safeDateStr} />}
-        {activeTab === 'connections' && <ConnectionsTab connsFilter={connsFilter} setConnsFilter={setConnsFilter} filteredConns={filteredConns} pagedConns={pagedConns} pageConns={pageConns} setPageConns={setPageConns} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingConnection={setViewingConnection} safeDateStr={safeDateStr} />}
+        {activeTab === 'connections' && <ConnectionsTab connsFilter={connsFilter} setConnsFilter={setConnsFilter} filteredConns={filteredConns} pagedConns={pagedConns} pageConns={pageConns} setPageConns={setPageConns} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingConnection={setViewingConnection} safeDateStr={safeDateStr} reports={reports} allPublications={allPublications} />}
 
       </main>
     </div>
