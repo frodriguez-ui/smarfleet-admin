@@ -4,7 +4,7 @@ import {
   Shield, Users, User as UserIcon, Truck, Package, LogOut, 
   AlertTriangle, CheckCircle, X, MapPin, Calendar, Link as LinkIcon, Edit,
   BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
-  Bell, DollarSign, HeartHandshake, Clock, ShieldCheck, RotateCcw, MessageCircle
+  Bell, DollarSign, HeartHandshake, Clock, ShieldCheck, RotateCcw, MessageCircle, Flag
 } from 'lucide-react';
 
 // --- IMPORTACIONES DE TUS COMPONENTES MODULARIZADOS ---
@@ -19,7 +19,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { 
   getFirestore, collectionGroup, collection, query, onSnapshot, 
-  doc, getDoc, updateDoc, writeBatch, serverTimestamp, orderBy, deleteDoc
+  doc, getDoc, updateDoc, writeBatch, serverTimestamp, orderBy, deleteDoc, where
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -337,6 +337,7 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
 const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
     const [messages, setMessages] = useState([]);
     const [trackingHistory, setTrackingHistory] = useState([]);
+    const [connReports, setConnReports] = useState([]); // 🌟 NUEVO ESTADO PARA REPORTES
     const [isLoadingChat, setIsLoadingChat] = useState(true);
     const [mapError, setMapError] = useState(false);
     const mapRef = useRef(null);
@@ -388,6 +389,21 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
 
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, JSON.stringify(conn.trackingHistory)]);
+
+    // 1.5 CARGAR DENUNCIAS / REPORTES LIGADOS A ESTE VIAJE
+    useEffect(() => {
+        const qReports = query(
+            collection(db, 'artifacts', projectId, 'public', 'data', 'reports'),
+            where('context', '==', `Tracking Viaje: ${conn.id}`)
+        );
+        const unsubReports = onSnapshot(qReports, snap => {
+            setConnReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (err) => {
+            console.error("Error cargando reportes:", err);
+        });
+        
+        return () => unsubReports();
+    }, [conn.id]);
 
     // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO
     useEffect(() => {
@@ -548,6 +564,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                     </div>
 
+                    {/* Disputa */}
                     {isDisputed && (
                         <div className="bg-red-50 border border-red-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
                             <div className="w-full md:flex-1">
@@ -579,6 +596,27 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                     Pago externo. Intervención manual requerida.
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* 🌟 NUEVO: Reportes de Usuarios 🌟 */}
+                    {connReports.length > 0 && (
+                        <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl shadow-sm flex flex-col items-start justify-between gap-4 shrink-0">
+                            <div className="w-full">
+                                <h3 className="font-black text-orange-800 text-xs flex items-center gap-1.5 mb-2"><Flag size={14}/> Reportes de Usuarios ({connReports.length})</h3>
+                                <div className="grid gap-2">
+                                    {connReports.map(rep => (
+                                        <div key={rep.id} className="text-[11px] text-orange-700 bg-white/60 p-3 rounded-lg border border-orange-200">
+                                            <p className="mb-1"><strong>Motivo:</strong> "{rep.reason}"</p>
+                                            {rep.details && <p className="italic text-orange-600 mb-2">"{rep.details}"</p>}
+                                            <div className="flex justify-between items-center bg-orange-100/50 p-1.5 rounded text-[9px] font-bold">
+                                                <span>Denunciado: <span className="font-black text-orange-800">{rep.reportedName}</span></span>
+                                                <span className="text-orange-600">Reportó: {rep.reporterName}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     )}
 
