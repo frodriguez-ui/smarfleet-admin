@@ -38,8 +38,6 @@ const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
 
-const LIBRARIES = ['places'];
-
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
 // ============================================================================
@@ -877,10 +875,13 @@ const AdminDashboard = () => {
       }
   };
 
+  // 🌟 LLAMADA AL BACKEND PARA BORRAR USUARIO 🌟
   const handleDeleteUser = async (userToDelete) => {
-      if(!window.confirm(`¿Seguro que deseas eliminar permanentemente el perfil de ${userToDelete.businessName || userToDelete.email}?`)) return;
+      if(!window.confirm(`¿Seguro que deseas eliminar permanentemente el perfil de ${userToDelete.businessName || userToDelete.email}? Esta acción borrará su acceso, viajes y archivos.`)) return;
       try {
-          await deleteDoc(doc(db, 'artifacts', projectId, 'users', userToDelete.id, 'profile', 'data'));
+          const deleteUserFn = httpsCallable(functions, 'deleteUserCompletely');
+          await deleteUserFn({ targetUid: userToDelete.id, appId: projectId });
+          alert("Usuario eliminado por completo del sistema.");
       } catch (error) {
           alert("Error al eliminar: " + error.message);
       }
@@ -975,7 +976,6 @@ const AdminDashboard = () => {
       });
   }, [allPublications, pubsFilter]);
 
-  // 🌟 CORRECCIÓN APLICADA: BÚSQUEDA CRUZADA PARA CONEXIONES 🌟
   const filteredConns = useMemo(() => {
       return connections.filter(c => {
           const post = allPublications.find(p => p.id === c.postId) || {};
