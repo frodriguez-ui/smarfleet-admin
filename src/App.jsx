@@ -116,7 +116,7 @@ const EditUserModal = ({ user, onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
             <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl animate-in zoom-in-95">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-black text-slate-800">Gestionar Usuario</h3>
@@ -215,7 +215,7 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
         : (user.currentPeriodEnd?.seconds ? new Date(user.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
             <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
                 
                 <div className="bg-white px-8 py-6 border-b border-slate-200 flex justify-between items-start shrink-0">
@@ -334,10 +334,10 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
     );
 };
 
-const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute }) => {
+const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute, users, setViewingUser }) => {
     const [messages, setMessages] = useState([]);
     const [trackingHistory, setTrackingHistory] = useState([]);
-    const [connReports, setConnReports] = useState([]); // 🌟 ESTADO PARA REPORTES
+    const [connReports, setConnReports] = useState([]); 
     const [isLoadingChat, setIsLoadingChat] = useState(true);
     const [mapError, setMapError] = useState(false);
     const mapRef = useRef(null);
@@ -346,9 +346,27 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
     const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
     const isFunded = conn.paymentStatus === 'funded';
 
+    // Identificar a los usuarios de forma robusta
+    const fromUser = users.find(u => u.id === conn.fromUid) || { businessName: conn.fromName, id: conn.fromUid, role: 'unknown' };
+    const toUser = users.find(u => u.id === conn.toUid) || { businessName: conn.toName, id: conn.toUid, role: 'unknown' };
+
+    let carrierUser = null;
+    let shipperUser = null;
+
+    if (post?.type === 'load') {
+        shipperUser = toUser;
+        carrierUser = fromUser;
+    } else if (post?.type === 'trip') {
+        carrierUser = toUser;
+        shipperUser = fromUser;
+    } else {
+        carrierUser = fromUser.role === 'carrier' ? fromUser : toUser;
+        shipperUser = fromUser.role === 'shipper' ? fromUser : toUser;
+    }
+
     const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
-    // 1. CARGAR CHAT E HISTORIAL DE RUTA DESDE FIREBASE
+    // 1. CARGAR CHAT DE FORMA INDEPENDIENTE (Fix: Separado del tracking para evitar parpadeos)
     useEffect(() => {
         setIsLoadingChat(true);
         const qMsg = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages'), orderBy('timestamp', 'asc'));
@@ -360,6 +378,11 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             setIsLoadingChat(false);
         });
 
+        return () => unsubMsg();
+    }, [conn.id]);
+
+    // 1.5 CARGAR HISTORIAL DE GPS
+    useEffect(() => {
         const qTrack = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'trackingLogs'), orderBy('timestamp', 'asc'));
         const unsubTrack = onSnapshot(qTrack, snap => {
             const logs = snap.docs.map(d => d.data());
@@ -387,10 +410,10 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             }
         });
 
-        return () => { unsubMsg(); unsubTrack(); };
-    }, [conn.id, JSON.stringify(conn.trackingHistory)]);
+        return () => unsubTrack();
+    }, [conn.id, conn.trackingHistory?.length]);
 
-    // 1.5 CARGAR DENUNCIAS / REPORTES LIGADOS A ESTE VIAJE
+    // 1.8 CARGAR DENUNCIAS / REPORTES LIGADOS A ESTE VIAJE
     useEffect(() => {
         const qReports = query(
             collection(db, 'artifacts', projectId, 'public', 'data', 'reports'),
@@ -524,24 +547,68 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
                 
                 <div className="bg-white px-6 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isDisputed ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-600'}`}>
                             {isDisputed ? <AlertTriangle size={24}/> : <LinkIcon size={24}/>}
                         </div>
-                        <div>
-                            <h2 className="text-xl font-black text-slate-800 leading-none flex items-center gap-2">
-                                Detalles de la Operación {isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest">En Disputa</span>}
+                        <div className="min-w-0">
+                            <h2 className="text-xl font-black text-slate-800 leading-none flex flex-wrap items-center gap-2">
+                                Detalles de Operación {isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">En Disputa</span>}
                             </h2>
-                            <p className="text-xs text-slate-500 font-mono mt-1">ID: {conn.id}</p>
+                            <p className="text-xs text-slate-500 font-mono mt-1.5 truncate">CONN: {conn.id}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
+                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors shrink-0"><X size={20}/></button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col gap-5">
                     
+                    {/* 🌟 NUEVA TARJETA DE CONTEXTO: RUTA Y PARTICIPANTES 🌟 */}
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start md:items-center shrink-0 w-full mb-2 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                        
+                        <div className="flex-1 w-full relative z-10">
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><MapPin size={14} className="text-blue-500"/> Ruta de la Operación</h4>
+                            {post ? (
+                                <div>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <span className="font-black text-slate-800 text-sm">{post.originCity || post.originState}</span>
+                                        <ArrowRight size={14} className="text-slate-400 shrink-0"/>
+                                        <span className="font-black text-slate-800 text-sm">{post.destinationCity || post.destinationState}</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">
+                                            POST ID: {post.customId || post.id.substring(0,8).toUpperCase()}
+                                        </span>
+                                        <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 flex items-center gap-1">
+                                            <Truck size={10}/> {post.vehicleType || post.loadType || 'Vehículo no espec.'}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <span className="text-slate-500 text-xs font-medium bg-slate-50 p-2 rounded-lg border border-slate-100 block w-max">Publicación original archivada o eliminada.</span>
+                            )}
+                        </div>
+
+                        <div className="flex-1 w-full border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col gap-3 relative z-10">
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users size={14} className="text-emerald-500"/> Participantes a Evaluar</h4>
+                            <div className="flex items-center justify-between bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100 transition-colors hover:bg-emerald-50">
+                                <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5"><Package size={12}/> Generador</span>
+                                <button onClick={(e) => { e.stopPropagation(); setViewingUser(shipperUser); }} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1.5 bg-white px-3 py-1.5 rounded shadow-sm border border-slate-200 hover:border-blue-300">
+                                    <span className="truncate max-w-[120px]">{shipperUser?.businessName || shipperUser?.id.substring(0,6)}</span> <Eye size={14}/>
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-between bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 transition-colors hover:bg-indigo-50">
+                                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5"><Truck size={12}/> Transportista</span>
+                                <button onClick={(e) => { e.stopPropagation(); setViewingUser(carrierUser); }} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1.5 bg-white px-3 py-1.5 rounded shadow-sm border border-slate-200 hover:border-blue-300">
+                                    <span className="truncate max-w-[120px]">{carrierUser?.businessName || carrierUser?.id.substring(0,6)}</span> <Eye size={14}/>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto hide-scrollbar shrink-0">
-                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Truck size={14}/> Hoja de Ruta</h4>
+                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Truck size={14}/> Hoja de Ruta Operativa</h4>
                         <div className="min-w-[600px] relative px-4 pb-2">
                             <div className="absolute top-5 left-[3.5rem] right-[3.5rem] h-1 bg-slate-100 rounded-full z-0"></div>
                             <div className="absolute top-5 left-[3.5rem] h-1 bg-emerald-500 rounded-full z-0 transition-all duration-700" style={{ width: `calc((100% - 7rem) * ${currentStepIndex / (trackingSteps.length - 1)})` }}></div>
@@ -696,7 +763,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                                     {isFromShipper ? conn.fromName : conn.toName}
                                                 </span>
                                                 <div className={`p-3 rounded-2xl text-xs font-medium shadow-sm max-w-[85%] ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm' : 'bg-blue-600 text-white rounded-tr-sm'}`}>
-                                                    {m.text}
+                                                    {m.text || m.message || 'Mensaje de sistema'}
                                                 </div>
                                                 <span className="text-[8px] text-slate-400 mt-1 px-1">{formatMessageTime(m.timestamp)}</span>
                                             </div>
@@ -803,7 +870,7 @@ const AdminDashboard = () => {
   const [trips, setTrips] = useState([]);
   const [loads, setLoads] = useState([]);
   const [connections, setConnections] = useState([]);
-  const [reports, setReports] = useState([]); // 🌟 ESTADO GLOBAL DE REPORTES
+  const [reports, setReports] = useState([]); 
   
   // Estados para Modales
   const [editingUser, setEditingUser] = useState(null);
@@ -920,7 +987,6 @@ const AdminDashboard = () => {
       }
   };
 
-  // 🌟 LLAMADA AL BACKEND PARA BORRAR USUARIO 🌟
   const handleDeleteUser = async (userToDelete) => {
       if(!window.confirm(`¿Seguro que deseas eliminar permanentemente el perfil de ${userToDelete.businessName || userToDelete.email}? Esta acción borrará su acceso, viajes y archivos.`)) return;
       try {
@@ -1125,12 +1191,16 @@ const AdminDashboard = () => {
   const pagedConns = filteredConns.slice((pageConns - 1) * ITEMS_PER_PAGE, pageConns * ITEMS_PER_PAGE);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex text-left font-sans">
+    <div className="min-h-screen bg-slate-50 flex text-left font-sans relative">
       
       {/* MODALES EN CAPAS SUPERIORES */}
       {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />}
+      
+      {/* AVISO IMPORTANTE DE ARQUITECTURA: Modal de Conexión se renderiza antes que UserDetailModal 
+          para garantizar que el modal del perfil de usuario pueda abrirse "por encima" de este. */}
+      {viewingConnection && <ConnectionDetailModal conn={viewingConnection} onClose={() => setViewingConnection(null)} trips={trips} loads={loads} handleResolveDispute={handleResolveDispute} resolvingDispute={resolvingDispute} users={users} setViewingUser={setViewingUser} />}
+      
       {viewingUser && <UserDetailModal user={viewingUser} onClose={() => setViewingUser(null)} allTrips={trips} allLoads={loads} allConnections={connections} />}
-      {viewingConnection && <ConnectionDetailModal conn={viewingConnection} onClose={() => setViewingConnection(null)} trips={trips} loads={loads} handleResolveDispute={handleResolveDispute} resolvingDispute={resolvingDispute} />}
 
       {/* --- MENÚ LATERAL --- */}
       <aside className="w-64 bg-slate-900 text-white fixed h-full flex flex-col p-6 z-20 shadow-2xl">
