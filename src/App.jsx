@@ -38,6 +38,8 @@ const db = getFirestore(app);
 const functions = getFunctions(app);
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'smarfleet-d7807';
 
+const LIBRARIES = ['places'];
+
 // ============================================================================
 // --- FUNCIONES GLOBALES DE SEGURIDAD (FECHAS Y FORMATOS) ---
 // ============================================================================
@@ -389,7 +391,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, JSON.stringify(conn.trackingHistory)]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (CORRECCIÓN FINAL)
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
@@ -964,13 +966,21 @@ const AdminDashboard = () => {
       });
   }, [allPublications, pubsFilter]);
 
+  // 🌟 CORRECCIÓN APLICADA: BÚSQUEDA CRUZADA PARA CONEXIONES 🌟
   const filteredConns = useMemo(() => {
       return connections.filter(c => {
+          const post = allPublications.find(p => p.id === c.postId) || {};
           const searchLower = connsFilter.search.toLowerCase();
+          
           const matchesSearch = !connsFilter.search || 
               c.fromName?.toLowerCase().includes(searchLower) || 
               c.toName?.toLowerCase().includes(searchLower) ||
-              c.id.toLowerCase().includes(searchLower);
+              c.id.toLowerCase().includes(searchLower) ||
+              post.originCity?.toLowerCase().includes(searchLower) ||
+              post.destinationCity?.toLowerCase().includes(searchLower) ||
+              post.originState?.toLowerCase().includes(searchLower) ||
+              post.destinationState?.toLowerCase().includes(searchLower) ||
+              post.customId?.toLowerCase().includes(searchLower);
           
           let targetStatus = c.tripStatus || c.status;
           if (c.isDisputed === true || c.tripStatus === 'disputed') targetStatus = 'disputed'; 
@@ -979,7 +989,7 @@ const AdminDashboard = () => {
 
           return matchesSearch && matchesStatus;
       });
-  }, [connections, connsFilter]);
+  }, [connections, connsFilter, allPublications]);
 
   // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS ---
   const stats = useMemo(() => {
