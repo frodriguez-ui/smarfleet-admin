@@ -340,7 +340,9 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
     const [connReports, setConnReports] = useState([]); 
     const [isLoadingChat, setIsLoadingChat] = useState(true);
     const [mapError, setMapError] = useState(false);
+    
     const mapRef = useRef(null);
+    const messagesEndRef = useRef(null); // Ref para auto-scroll del chat
 
     const post = [...trips, ...loads].find(p => p.id === conn.postId);
     const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
@@ -366,24 +368,25 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
 
     const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
-    // 1. CARGAR CHAT DE FORMA INDEPENDIENTE (Fix: Separado del tracking para evitar parpadeos)
+    // 1. CARGAR CHAT Y TRACKING SIN DEPENDENCIA DE ÍNDICES COMPUESTOS (Solución al chat en blanco)
     useEffect(() => {
         setIsLoadingChat(true);
-        const qMsg = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages'), orderBy('timestamp', 'asc'));
+
+        // A. Consultar Chat (Ordenando en memoria para evitar colapsos por falta de índices)
+        const qMsg = collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages');
         const unsubMsg = onSnapshot(qMsg, snap => {
-            setMessages(snap.docs.map(d => ({id: d.id, ...d.data()})));
+            const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            // Ordenamos los mensajes localmente por fecha
+            msgs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+            setMessages(msgs);
             setIsLoadingChat(false);
         }, (err) => {
             console.error("Error cargando chat:", err);
             setIsLoadingChat(false);
         });
 
-        return () => unsubMsg();
-    }, [conn.id]);
-
-    // 1.5 CARGAR HISTORIAL DE GPS
-    useEffect(() => {
-        const qTrack = query(collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'trackingLogs'), orderBy('timestamp', 'asc'));
+        // B. Consultar Historial GPS (También en memoria)
+        const qTrack = collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'trackingLogs');
         const unsubTrack = onSnapshot(qTrack, snap => {
             const logs = snap.docs.map(d => d.data());
             let combined = [...(conn.trackingHistory || []), ...logs];
@@ -410,8 +413,15 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             }
         });
 
-        return () => unsubTrack();
-    }, [conn.id, conn.trackingHistory?.length]);
+        return () => { unsubMsg(); unsubTrack(); };
+    }, [conn.id, JSON.stringify(conn.trackingHistory)]);
+
+    // 1.5 Auto-Scroll para el Chat
+    useEffect(() => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages]);
 
     // 1.8 CARGAR DENUNCIAS / REPORTES LIGADOS A ESTE VIAJE
     useEffect(() => {
@@ -428,7 +438,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => unsubReports();
     }, [conn.id]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO
+    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (Ajustado para enfocar mejor)
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
@@ -510,15 +520,24 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         travelMode: window.google.maps.TravelMode.DRIVING,
                     }).then(response => {
                         directionsRenderer.setDirections(response);
+                        // Asegurar que el div se haya renderizado aplicando un pequeño retraso antes de hacer fitBounds
                         if (hasRealRoute) {
-                            map.fitBounds(realRouteBounds);
+                            setTimeout(() => {
+                                if (mapRef.current) map.fitBounds(realRouteBounds, 50); // 50px de padding para no pegarlo a las orillas
+                            }, 300);
                         }
                     }).catch(e => {
                         console.warn("No se pudo calcular la ruta planeada gris", e);
-                        if (hasRealRoute) map.fitBounds(realRouteBounds);
+                        if (hasRealRoute) {
+                            setTimeout(() => {
+                                if (mapRef.current) map.fitBounds(realRouteBounds, 50);
+                            }, 300);
+                        }
                     });
                 } else if (hasRealRoute) {
-                    map.fitBounds(realRouteBounds);
+                    setTimeout(() => {
+                        if (mapRef.current) map.fitBounds(realRouteBounds, 50);
+                    }, 300);
                 }
             })
             .catch((err) => {
@@ -687,11 +706,11 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                     )}
 
-                    <div className="flex flex-col lg:flex-row gap-5 h-full min-h-[400px]">
+                    <div className="flex flex-col lg:flex-row gap-5 h-[500px] md:h-[450px]">
                         
-                        <div className="w-full lg:w-1/2 flex flex-col gap-5">
+                        <div className="w-full lg:w-1/2 flex flex-col gap-5 h-full">
                             
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
+                            <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
                                 <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
                                 <div className="flex justify-between items-end mb-3">
                                     <div>
@@ -708,8 +727,8 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                 </div>
                             </div>
 
-                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[300px]">
-                                <div className="flex justify-between items-center mb-4">
+                            <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[300px]">
+                                <div className="flex justify-between items-center mb-4 shrink-0">
                                     <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Trayecto Real</h4>
                                     {conn.liveLocation && (
                                         <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5">
@@ -718,7 +737,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                     )}
                                 </div>
 
-                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner min-h-[250px] flex flex-col">
+                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner">
                                     {mapError ? (
                                         <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-rose-50 p-6 text-center m-2 rounded-xl border-2 border-rose-200 shadow-inner">
                                             <AlertTriangle size={32} className="text-rose-500 mb-3"/>
@@ -726,7 +745,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                             <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Es posible que el dominio desde donde abres esta página no esté autorizado en las restricciones de tu API Key de Google Cloud. Por favor, asegúrate de permitir las variaciones de dominios en la consola de Google.</p>
                                         </div>
                                     ) : (
-                                        <div ref={mapRef} style={{ width: '100%', minHeight: '300px', height: '100%' }} className="absolute inset-0 flex items-center justify-center bg-slate-50">
+                                        <div ref={mapRef} className="absolute inset-0 flex items-center justify-center bg-slate-50">
                                             <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                                 <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
                                                 <p className="text-[10px] font-bold uppercase tracking-widest">Iniciando Google Maps...</p>
@@ -737,7 +756,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                             </div>
                         </div>
 
-                        <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-[400px] lg:h-auto">
+                        <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full">
                             <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                                 <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
                                 <p className="text-[10px] text-slate-500 font-medium mt-1">Los administradores tienen acceso de solo lectura para auditoría y resolución de disputas.</p>
@@ -770,6 +789,8 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                         )
                                     })
                                 )}
+                                {/* Ancla para auto-scroll */}
+                                <div ref={messagesEndRef} />
                             </div>
                         </div>
 
@@ -884,10 +905,10 @@ const AdminDashboard = () => {
   const [notifForm, setNotifForm] = useState({ title: '', message: '', type: 'info' });
   const [sendingNotif, setSendingNotif] = useState(false);
 
-  // --- ESTADOS PARA FILTROS ---
+  // --- ESTADOS PARA FILTROS (INCLUYE ORDENAMIENTO POR RECIENTES) ---
   const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all', status: 'all' });
   const [pubsFilter, setPubsFilter] = useState({ search: '', type: 'all', status: 'all' });
-  const [connsFilter, setConnsFilter] = useState({ search: '', status: 'all' });
+  const [connsFilter, setConnsFilter] = useState({ search: '', status: 'all', sortBy: 'recent' });
   
   // Estado para Gráficas Analíticas
   const [trendMonthsRange, setTrendMonthsRange] = useState(6);
@@ -1087,8 +1108,9 @@ const AdminDashboard = () => {
       });
   }, [allPublications, pubsFilter]);
 
+  // 🌟 SE APLICA EL ORDENAMIENTO (MÁS RECIENTES/MÁS ANTIGUAS) A LAS CONEXIONES
   const filteredConns = useMemo(() => {
-      return connections.filter(c => {
+      const result = connections.filter(c => {
           const post = allPublications.find(p => p.id === c.postId) || {};
           const searchLower = connsFilter.search.toLowerCase();
           
@@ -1115,6 +1137,13 @@ const AdminDashboard = () => {
 
           return matchesSearch && matchesStatus;
       });
+
+      // ORDENAR POR FECHA
+      if (connsFilter.sortBy === 'oldest') {
+          return result.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      } else {
+          return result.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      }
   }, [connections, connsFilter, allPublications, reports]);
 
   // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS ---
@@ -1272,31 +1301,5 @@ const AdminDashboard = () => {
 
       </main>
     </div>
-  );
-};
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  if (loading) {
-    return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white font-bold">Cargando...</div>;
-  }
-
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={!user ? <AdminLogin /> : <Navigate to="/dashboard" />} />
-        <Route path="/dashboard" element={user ? <AdminDashboard /> : <Navigate to="/" />} />
-      </Routes>
-    </BrowserRouter>
   );
 }
