@@ -1303,3 +1303,29 @@ const AdminDashboard = () => {
     </div>
   );
 }
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white font-bold">Cargando...</div>;
+  }
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={!user ? <AdminLogin /> : <Navigate to="/dashboard" />} />
+        <Route path="/dashboard" element={user ? <AdminDashboard /> : <Navigate to="/" />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
