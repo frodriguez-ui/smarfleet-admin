@@ -101,14 +101,30 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
-                            // 🌟 NUEVA BÚSQUEDA ULTRA-ROBUSTA DEL VIAJE 🌟
+                            // 🌟 BÚSQUEDA ULTRA-ROBUSTA DEL VIAJE/CHAT 🌟
                             let relatedConn = null;
                             if (connections && connections.length > 0) {
+                                // 1. Buscar coincidencia exacta por texto (Contexto del Reporte)
                                 relatedConn = connections.find(c => 
                                     (rep.context && rep.context.includes(c.id)) || 
                                     (rep.context && c.postId && rep.context.includes(c.postId)) ||
                                     (rep.connectionId && rep.connectionId === c.id)
                                 );
+
+                                // 2. PLAN B (INFALIBLE): Si no lo encontró por texto, buscamos 
+                                // la conexión en la que AMBOS usuarios participan.
+                                if (!relatedConn && rep.reporterUid && rep.reportedUid) {
+                                    const sharedConns = connections.filter(c => 
+                                        c.participants && 
+                                        c.participants.includes(rep.reporterUid) && 
+                                        c.participants.includes(rep.reportedUid)
+                                    );
+                                    
+                                    // Si tienen un chat/conexión activa juntos, tomamos la más reciente
+                                    if (sharedConns.length > 0) {
+                                        relatedConn = sharedConns.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+                                    }
+                                }
                             }
 
                             return (
@@ -149,17 +165,17 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context || 'Sin contexto'}</span>
                                             </div>
                                             
-                                            {/* BOTÓN VER CHAT - ULTRA ROBUSTO */}
+                                            {/* BOTÓN VER CHAT - AHORA CON PLAN B INFALIBLE */}
                                             <button
-                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque fue eliminado de la base de datos o el reporte no tiene el ID asignado.')}
-                                                className={`flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm w-fit ${
+                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque la conexión ya fue eliminada permanentemente por los usuarios.')}
+                                                className={`flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-xl transition-colors shadow-sm w-fit ${
                                                     relatedConn 
-                                                    ? 'text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100' 
+                                                    ? 'text-white bg-blue-600 border border-blue-700 hover:bg-blue-700 shadow-blue-500/20' 
                                                     : 'text-slate-400 bg-slate-50 border border-slate-200 cursor-not-allowed'
                                                 }`}
                                             >
                                                 <MessageCircle size={14}/> 
-                                                {relatedConn ? 'Ver Chat / Detalles' : 'Viaje no vinculado o eliminado'}
+                                                {relatedConn ? 'Auditar Viaje / Chat Activo' : 'Viaje no vinculado o eliminado'}
                                             </button>
                                         </div>
                                     </td>
