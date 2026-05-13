@@ -4,7 +4,7 @@ import {
   Shield, Users, User as UserIcon, Truck, Package, LogOut, 
   AlertTriangle, CheckCircle, X, MapPin, Calendar, Link as LinkIcon, Edit,
   BarChart3, Activity, Ban, Eye, FileText, Phone, Mail, ArrowRight,
-  Bell, DollarSign, HeartHandshake, Clock, ShieldCheck, RotateCcw, MessageCircle, Flag
+  Bell, DollarSign, HeartHandshake, Clock, ShieldCheck, RotateCcw, MessageCircle, Flag, Trash2
 } from 'lucide-react';
 
 // --- IMPORTACIONES DE TUS COMPONENTES MODULARIZADOS ---
@@ -13,6 +13,7 @@ import { NotificationsTab } from './Components/Admin/NotificationsTab';
 import { UsersTab } from './Components/Admin/UsersTab';
 import { PublicationsTab } from './Components/Admin/PublicationsTab';
 import { ConnectionsTab } from './Components/Admin/ConnectionsTab';
+import { ReportsTab } from './Components/Admin/ReportsTab';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
 import { initializeApp } from 'firebase/app';
@@ -214,20 +215,28 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
         ? new Date(user.subscriptionEndsAt.seconds * 1000).toLocaleDateString() 
         : (user.currentPeriodEnd?.seconds ? new Date(user.currentPeriodEnd.seconds * 1000).toLocaleDateString() : 'Auto-renovable');
 
+    const warnings = user.warningsCount || 0;
+
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
             <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
                 
                 <div className="bg-white px-8 py-6 border-b border-slate-200 flex justify-between items-start shrink-0">
-                    <div className="flex gap-5 items-center">
+                    <div className="flex gap-5 items-center min-w-0">
                         <div className="w-16 h-16 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shrink-0 shadow-sm">
                             {user.photoData ? <img src={user.photoData} alt="Logo" className="w-full h-full object-cover" /> : <Users size={28}/>}
                         </div>
-                        <div>
-                            <div className="flex items-center gap-3 mb-1">
-                                <h2 className="text-2xl font-black text-slate-800 leading-none">{user.businessName || 'Usuario sin nombre'}</h2>
-                                {user.isSuspended && <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Ban size={10}/> Suspendido</span>}
-                                {user.isAdmin && <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1"><Shield size={10}/> Admin</span>}
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                <h2 className="text-2xl font-black text-slate-800 leading-none truncate">{user.businessName || 'Usuario sin nombre'}</h2>
+                                {user.isSuspended && <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shrink-0"><Ban size={10}/> Suspendido</span>}
+                                {user.isAdmin && <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shrink-0"><Shield size={10}/> Admin</span>}
+                                
+                                {warnings > 0 && (
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shrink-0 ${warnings >= 3 ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-orange-100 text-orange-700'}`}>
+                                        <AlertTriangle size={10}/> {warnings}/3 Amonestaciones
+                                    </span>
+                                )}
                             </div>
                             <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-500 mt-2">
                                 <span className="flex items-center gap-1.5"><Mail size={14}/> {user.email || user.id}</span>
@@ -241,10 +250,20 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors"><X size={20}/></button>
+                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors shrink-0"><X size={20}/></button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
+                    
+                    {warnings >= 3 && !user.isSuspended && (
+                        <div className="bg-red-50 border border-red-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                            <div>
+                                <h4 className="text-red-800 font-black flex items-center gap-2"><AlertTriangle size={18}/> Alerta Máxima de Moderación</h4>
+                                <p className="text-red-700 text-xs mt-1 font-medium">Este usuario ha acumulado 3 amonestaciones. Te sugerimos ir a "Editar" y suspender su cuenta inmediatamente.</p>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Package size={12}/> Pub. Activas</p>
@@ -342,13 +361,12 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
     const [mapError, setMapError] = useState(false);
     
     const mapRef = useRef(null);
-    const messagesEndRef = useRef(null); // Ref para auto-scroll del chat
+    const messagesEndRef = useRef(null); 
 
     const post = [...trips, ...loads].find(p => p.id === conn.postId);
     const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
     const isFunded = conn.paymentStatus === 'funded';
 
-    // Identificar a los usuarios de forma robusta
     const fromUser = users.find(u => u.id === conn.fromUid) || { businessName: conn.fromName, id: conn.fromUid, role: 'unknown' };
     const toUser = users.find(u => u.id === conn.toUid) || { businessName: conn.toName, id: conn.toUid, role: 'unknown' };
 
@@ -368,15 +386,13 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
 
     const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
-    // 1. CARGAR CHAT Y TRACKING SIN DEPENDENCIA DE ÍNDICES COMPUESTOS (Solución al chat en blanco)
+    // CARGAR CHAT Y TRACKING 
     useEffect(() => {
         setIsLoadingChat(true);
 
-        // A. Consultar Chat (Ordenando en memoria para evitar colapsos por falta de índices)
         const qMsg = collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages');
         const unsubMsg = onSnapshot(qMsg, snap => {
             const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            // Ordenamos los mensajes localmente por fecha
             msgs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
             setMessages(msgs);
             setIsLoadingChat(false);
@@ -385,7 +401,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             setIsLoadingChat(false);
         });
 
-        // B. Consultar Historial GPS (También en memoria)
         const qTrack = collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'trackingLogs');
         const unsubTrack = onSnapshot(qTrack, snap => {
             const logs = snap.docs.map(d => d.data());
@@ -407,7 +422,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
             unique.sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
             setTrackingHistory(unique);
         }, (err) => {
-            console.warn("Aviso: No se cargó trackingLogs. Usando fallback.", err);
+            console.warn("Aviso: No se cargó trackingLogs.", err);
             if (conn.trackingHistory && Array.isArray(conn.trackingHistory)) {
                 setTrackingHistory(conn.trackingHistory);
             }
@@ -416,14 +431,12 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => { unsubMsg(); unsubTrack(); };
     }, [conn.id, JSON.stringify(conn.trackingHistory)]);
 
-    // 1.5 Auto-Scroll para el Chat
     useEffect(() => {
         if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [messages]);
 
-    // 1.8 CARGAR DENUNCIAS / REPORTES LIGADOS A ESTE VIAJE
     useEffect(() => {
         const qReports = query(
             collection(db, 'artifacts', projectId, 'public', 'data', 'reports'),
@@ -438,7 +451,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
         return () => unsubReports();
     }, [conn.id]);
 
-    // 2. INICIALIZAR Y DIBUJAR MAPA NATIVO (Ajustado para enfocar mejor)
     useEffect(() => {
         if (!googleApiKey || !mapRef.current) return;
         
@@ -520,10 +532,9 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         travelMode: window.google.maps.TravelMode.DRIVING,
                     }).then(response => {
                         directionsRenderer.setDirections(response);
-                        // Asegurar que el div se haya renderizado aplicando un pequeño retraso antes de hacer fitBounds
                         if (hasRealRoute) {
                             setTimeout(() => {
-                                if (mapRef.current) map.fitBounds(realRouteBounds, 50); // 50px de padding para no pegarlo a las orillas
+                                if (mapRef.current) map.fitBounds(realRouteBounds, 50); 
                             }, 300);
                         }
                     }).catch(e => {
@@ -561,6 +572,18 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
     let currentStepIndex = 0;
     trackingSteps.forEach((s, i) => { if (s.time) currentStepIndex = i; });
 
+    // 🔥 PUERTA TRASERA: BORRADO FORZADO DE VIAJE EN CONFLICTO 🔥
+    const handleForceDelete = async () => {
+        if (!window.confirm("🚨 ADVERTENCIA: Estás a punto de forzar el borrado de esta conexión de la base de datos. Esta acción no se puede deshacer y puede afectar historiales. ¿Proceder?")) return;
+        try {
+            await deleteDoc(doc(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id));
+            alert("Conexión borrada exitosamente. Por favor actualiza la página.");
+            onClose();
+        } catch (error) {
+            alert("Error al borrar conexión: " + error.message);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
             <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -574,7 +597,10 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                             <h2 className="text-xl font-black text-slate-800 leading-none flex flex-wrap items-center gap-2">
                                 Detalles de Operación {isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">En Disputa</span>}
                             </h2>
-                            <p className="text-xs text-slate-500 font-mono mt-1.5 truncate">CONN: {conn.id}</p>
+                            <p className="text-xs text-slate-500 font-mono mt-1.5 truncate flex flex-wrap items-center gap-3 md:gap-4">
+                                <span>CONN: {conn.id}</span>
+                                <button onClick={handleForceDelete} className="text-red-500 hover:text-red-700 font-bold bg-red-50 px-2 py-0.5 rounded transition-colors flex items-center gap-1 shrink-0"><Trash2 size={12}/> Borrar Forzosamente</button>
+                            </p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors shrink-0"><X size={20}/></button>
@@ -582,7 +608,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
 
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col gap-5">
                     
-                    {/* 🌟 NUEVA TARJETA DE CONTEXTO: RUTA Y PARTICIPANTES 🌟 */}
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start md:items-center shrink-0 w-full mb-2 relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
                         
@@ -685,7 +710,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                     )}
 
-                    {/* 🌟 Reportes de Usuarios 🌟 */}
+                    {/* Reportes de Usuarios */}
                     {connReports.length > 0 && (
                         <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl shadow-sm flex flex-col items-start justify-between gap-4 shrink-0">
                             <div className="w-full">
@@ -742,7 +767,7 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                         <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-rose-50 p-6 text-center m-2 rounded-xl border-2 border-rose-200 shadow-inner">
                                             <AlertTriangle size={32} className="text-rose-500 mb-3"/>
                                             <p className="text-xs font-black uppercase tracking-widest text-rose-800 mb-1.5">No se pudo cargar el mapa</p>
-                                            <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Es posible que el dominio desde donde abres esta página no esté autorizado en las restricciones de tu API Key de Google Cloud. Por favor, asegúrate de permitir las variaciones de dominios en la consola de Google.</p>
+                                            <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Es posible que el dominio no esté autorizado en las restricciones de tu API Key de Google Cloud.</p>
                                         </div>
                                     ) : (
                                         <div ref={mapRef} className="absolute inset-0 flex items-center justify-center bg-slate-50">
@@ -789,7 +814,6 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                                         )
                                     })
                                 )}
-                                {/* Ancla para auto-scroll */}
                                 <div ref={messagesEndRef} />
                             </div>
                         </div>
@@ -905,25 +929,29 @@ const AdminDashboard = () => {
   const [notifForm, setNotifForm] = useState({ title: '', message: '', type: 'info' });
   const [sendingNotif, setSendingNotif] = useState(false);
 
-  // --- ESTADOS PARA FILTROS (INCLUYE ORDENAMIENTO POR RECIENTES) ---
-  const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all', status: 'all' });
+  // --- ESTADOS PARA FILTROS ---
+  const [usersFilter, setUsersFilter] = useState({ search: '', role: 'all', tier: 'all', status: 'all', warnings: 'all' });
   const [pubsFilter, setPubsFilter] = useState({ search: '', type: 'all', status: 'all' });
   const [connsFilter, setConnsFilter] = useState({ search: '', status: 'all', sortBy: 'recent' });
+  const [reportsFilter, setReportsFilter] = useState({ search: '', status: 'pending' });
   
   // Estado para Gráficas Analíticas
   const [trendMonthsRange, setTrendMonthsRange] = useState(6);
   const [resolvingDispute, setResolvingDispute] = useState(null); 
+  const [processingWarning, setProcessingWarning] = useState(false);
 
   // --- ESTADOS PARA PAGINACIÓN ---
   const [pageUsers, setPageUsers] = useState(1);
   const [pagePubs, setPagePubs] = useState(1);
   const [pageConns, setPageConns] = useState(1);
+  const [pageReports, setPageReports] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
   // Reseteo de páginas al cambiar filtros
   useEffect(() => setPageUsers(1), [usersFilter]);
   useEffect(() => setPagePubs(1), [pubsFilter]);
   useEffect(() => setPageConns(1), [connsFilter]);
+  useEffect(() => setPageReports(1), [reportsFilter]);
 
   // Escuchar colecciones principales de Firebase
   useEffect(() => {
@@ -995,6 +1023,29 @@ const AdminDashboard = () => {
           alert("Hubo un error al comunicar con el servidor de pagos: " + error.message);
       } finally {
           setResolvingDispute(null);
+      }
+  };
+
+  // 🌟 FUNCIÓN: AMONESTAR O DESCARTAR REPORTE 🌟
+  const handleIssueWarning = async (reportId, reportedUid, action) => {
+      const actionText = action === 'warn' ? 'AMONESTAR al usuario (1/3)' : 'DESCARTAR este reporte';
+      if(!window.confirm(`¿Seguro que deseas ${actionText}?`)) return;
+
+      setProcessingWarning(true);
+      try {
+          const issueWarningFn = httpsCallable(functions, 'issueUserWarning');
+          await issueWarningFn({ 
+              reportId: reportId, 
+              reportedUid: reportedUid, 
+              action: action, 
+              adminNotes: action === 'warn' ? 'Amonestado por Admin' : 'Falso reporte', 
+              appId: projectId 
+          });
+          alert(action === 'warn' ? "¡Usuario amonestado exitosamente!" : "Reporte descartado.");
+      } catch (error) {
+          alert("Error al procesar: " + error.message);
+      } finally {
+          setProcessingWarning(false);
       }
   };
 
@@ -1088,8 +1139,14 @@ const AdminDashboard = () => {
               || (usersFilter.status === 'active' && !isSuspended) 
               || (usersFilter.status === 'suspended' && isSuspended);
 
-          return matchesSearch && matchesRole && matchesTier && matchesStatus;
-      });
+          // Filtro por Amonestaciones (Problemáticos)
+          const warnings = u.warningsCount || 0;
+          const matchesWarnings = usersFilter.warnings === 'all' || 
+                                  (usersFilter.warnings === 'problematic' && warnings > 0) || 
+                                  (usersFilter.warnings === 'critical' && warnings >= 3);
+
+          return matchesSearch && matchesRole && matchesTier && matchesStatus && matchesWarnings;
+      }).sort((a, b) => (b.warningsCount || 0) - (a.warningsCount || 0));
   }, [users, usersFilter]);
 
   const filteredPubs = useMemo(() => {
@@ -1108,7 +1165,7 @@ const AdminDashboard = () => {
       });
   }, [allPublications, pubsFilter]);
 
-  // 🌟 SE APLICA EL ORDENAMIENTO (MÁS RECIENTES/MÁS ANTIGUAS) A LAS CONEXIONES
+  // ORDENAMIENTO DE LAS CONEXIONES
   const filteredConns = useMemo(() => {
       const result = connections.filter(c => {
           const post = allPublications.find(p => p.id === c.postId) || {};
@@ -1138,13 +1195,26 @@ const AdminDashboard = () => {
           return matchesSearch && matchesStatus;
       });
 
-      // ORDENAR POR FECHA
       if (connsFilter.sortBy === 'oldest') {
           return result.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
       } else {
           return result.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       }
   }, [connections, connsFilter, allPublications, reports]);
+
+  const filteredReports = useMemo(() => {
+      return reports.filter(r => {
+          const searchLower = reportsFilter.search.toLowerCase();
+          const matchesSearch = !reportsFilter.search || 
+                                r.reportedName?.toLowerCase().includes(searchLower) || 
+                                r.reporterName?.toLowerCase().includes(searchLower) || 
+                                r.reason?.toLowerCase().includes(searchLower);
+          
+          const matchesStatus = reportsFilter.status === 'all' || r.status === reportsFilter.status;
+
+          return matchesSearch && matchesStatus;
+      }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  }, [reports, reportsFilter]);
 
   // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS ---
   const stats = useMemo(() => {
@@ -1218,17 +1288,14 @@ const AdminDashboard = () => {
   const pagedUsers = filteredUsers.slice((pageUsers - 1) * ITEMS_PER_PAGE, pageUsers * ITEMS_PER_PAGE);
   const pagedPubs = filteredPubs.slice((pagePubs - 1) * ITEMS_PER_PAGE, pagePubs * ITEMS_PER_PAGE);
   const pagedConns = filteredConns.slice((pageConns - 1) * ITEMS_PER_PAGE, pageConns * ITEMS_PER_PAGE);
+  const pagedReports = filteredReports.slice((pageReports - 1) * ITEMS_PER_PAGE, pageReports * ITEMS_PER_PAGE);
 
   return (
     <div className="min-h-screen bg-slate-50 flex text-left font-sans relative">
       
       {/* MODALES EN CAPAS SUPERIORES */}
       {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} />}
-      
-      {/* AVISO IMPORTANTE DE ARQUITECTURA: Modal de Conexión se renderiza antes que UserDetailModal 
-          para garantizar que el modal del perfil de usuario pueda abrirse "por encima" de este. */}
       {viewingConnection && <ConnectionDetailModal conn={viewingConnection} onClose={() => setViewingConnection(null)} trips={trips} loads={loads} handleResolveDispute={handleResolveDispute} resolvingDispute={resolvingDispute} users={users} setViewingUser={setViewingUser} />}
-      
       {viewingUser && <UserDetailModal user={viewingUser} onClose={() => setViewingUser(null)} allTrips={trips} allLoads={loads} allConnections={connections} />}
 
       {/* --- MENÚ LATERAL --- */}
@@ -1250,6 +1317,9 @@ const AdminDashboard = () => {
             </button>
             <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
                 <LinkIcon size={18}/> Conexiones
+            </button>
+            <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'reports' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                <Flag size={18}/> Moderación <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full ml-auto">{reports.filter(r=>r.status==='pending').length}</span>
             </button>
             
             <div className="pt-4 pb-2">
@@ -1298,11 +1368,12 @@ const AdminDashboard = () => {
         {activeTab === 'users' && <UsersTab usersFilter={usersFilter} setUsersFilter={setUsersFilter} filteredUsers={filteredUsers} pagedUsers={pagedUsers} pageUsers={pageUsers} setPageUsers={setPageUsers} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingUser={setViewingUser} setEditingUser={setEditingUser} handleDeleteUser={handleDeleteUser} safeDateStr={safeDateStr} />}
         {activeTab === 'publications' && <PublicationsTab pubsFilter={pubsFilter} setPubsFilter={setPubsFilter} filteredPubs={filteredPubs} pagedPubs={pagedPubs} pagePubs={pagePubs} setPagePubs={setPagePubs} ITEMS_PER_PAGE={ITEMS_PER_PAGE} handleDeletePublication={handleDeletePublication} safeDateStr={safeDateStr} />}
         {activeTab === 'connections' && <ConnectionsTab connsFilter={connsFilter} setConnsFilter={setConnsFilter} filteredConns={filteredConns} pagedConns={pagedConns} pageConns={pageConns} setPageConns={setPageConns} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingConnection={setViewingConnection} safeDateStr={safeDateStr} reports={reports} allPublications={allPublications} />}
+        {activeTab === 'reports' && <ReportsTab reportsFilter={reportsFilter} setReportsFilter={setReportsFilter} filteredReports={filteredReports} pagedReports={pagedReports} pageReports={pageReports} setPageReports={setPageReports} ITEMS_PER_PAGE={ITEMS_PER_PAGE} safeDateStr={safeDateStr} handleIssueWarning={handleIssueWarning} processingWarning={processingWarning} users={users} setViewingUser={setViewingUser} />}
 
       </main>
     </div>
   );
-}
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
