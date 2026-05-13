@@ -46,11 +46,16 @@ export const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange
 
 export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, pagedReports, pageReports, setPageReports, ITEMS_PER_PAGE, safeDateStr, handleIssueWarning, processingWarning, users = [], setViewingUser, connections = [], setViewingConnection }) => {
     
-    // Función auxiliar para ver el perfil de un usuario
+    // Función auxiliar para ver el perfil de un usuario (con protección contra errores)
     const openProfile = (uid) => {
         const u = users.find(x => x.id === uid);
-        if (u && setViewingUser) setViewingUser(u);
-        else alert("El usuario ya no existe o fue eliminado.");
+        if (u && typeof setViewingUser === 'function') {
+            setViewingUser(u);
+        } else if (!u) {
+            alert("El usuario ya no existe o fue eliminado.");
+        } else {
+            alert("⚠️ Error de Integración: Falta la propiedad 'setViewingUser' en el componente padre.");
+        }
     };
 
     return (
@@ -128,7 +133,6 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                         const pId = (c.postId || '').toUpperCase();
                                         
                                         // Evaluamos si la conexión de Firebase (cId) INICIA con el ID de 8 caracteres (searchId)
-                                        // Esto es vital porque los chats apenas iniciados usan el connection.id
                                         return cId === searchId || 
                                                cId.startsWith(searchId) || 
                                                pId === searchId || 
@@ -138,9 +142,7 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                 }
                             }
 
-                            // 3. EL TRUCO DEFINITIVO: Si el chat sigue sin aparecer, creamos
-                            // un objeto comodín COMPLETAMENTE POBLADO. Esto forzará al modal a 
-                            // abrirse y consultar directamente a Firebase sin colapsar la pantalla.
+                            // 3. EL TRUCO DEFINITIVO: Objeto comodín COMPLETAMENTE POBLADO.
                             if (!relatedConn && extractedChatId) {
                                 relatedConn = {
                                     id: extractedChatId,
@@ -149,7 +151,7 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                     fromName: rep.reporterName,
                                     toUid: rep.reportedUid,
                                     toName: rep.reportedName,
-                                    participants: [rep.reporterUid, rep.reportedUid], // Campo vital para evitar crashes
+                                    participants: [rep.reporterUid, rep.reportedUid], 
                                     status: 'accepted',
                                     tripStatus: 'contact_only',
                                     timeline: {},
@@ -196,13 +198,19 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                             </div>
                                             
                                             {/* =======================================================
-                                                BOTÓN DE AUDITORÍA DIRECTO (FORZADO AL ID)
+                                                BOTÓN DE AUDITORÍA DIRECTO (CON PROTECCIÓN)
                                             ======================================================= */}
                                             <button
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
-                                                    if (relatedConn) setViewingConnection(relatedConn);
+                                                    if (relatedConn) {
+                                                        if (typeof setViewingConnection === 'function') {
+                                                            setViewingConnection(relatedConn);
+                                                        } else {
+                                                            alert("⚠️ Falta actualizar tu código principal: Asegúrate de pasar 'setViewingConnection={setViewingConnection}' a la etiqueta <ReportsTab /> en tu archivo base.");
+                                                        }
+                                                    }
                                                 }}
                                                 disabled={!relatedConn}
                                                 className={`flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-xl transition-colors shadow-sm w-fit ${
@@ -238,14 +246,18 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                         {isPending ? (
                                             <div className="flex flex-col items-end gap-2 w-full max-w-[160px] ml-auto">
                                                 <button 
-                                                    onClick={() => handleIssueWarning(rep.id, rep.reportedUid, 'warn')} 
+                                                    onClick={() => {
+                                                        if (typeof handleIssueWarning === 'function') handleIssueWarning(rep.id, rep.reportedUid, 'warn');
+                                                    }} 
                                                     disabled={processingWarning}
                                                     className="w-full px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all shadow-md shadow-rose-500/20 disabled:opacity-50 flex justify-center items-center gap-1.5"
                                                 >
                                                     <AlertTriangle size={14}/> Emitir Amonestación
                                                 </button>
                                                 <button 
-                                                    onClick={() => handleIssueWarning(rep.id, rep.reportedUid, 'dismiss')} 
+                                                    onClick={() => {
+                                                        if (typeof handleIssueWarning === 'function') handleIssueWarning(rep.id, rep.reportedUid, 'dismiss');
+                                                    }} 
                                                     disabled={processingWarning}
                                                     className="w-full px-3 py-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all disabled:opacity-50 flex justify-center items-center gap-1.5"
                                                 >
