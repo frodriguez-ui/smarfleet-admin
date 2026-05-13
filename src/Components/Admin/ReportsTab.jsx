@@ -101,27 +101,40 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
-                            // 🌟 EXTRACCIÓN DIRECTA DEL ID DEL CHAT 🌟
-                            let relatedConn = null;
-                            let extractedChatId = rep.connectionId;
+                            // =======================================================
+                            // ALGORITMO DE EXTRACCIÓN DIRECTA DEL ID DEL CHAT
+                            // =======================================================
+                            let extractedChatId = '';
 
-                            // Si el ID viene en el formato "Tracking Viaje: 8JIR7UUW", extraemos lo que está después de los dos puntos
-                            if (!extractedChatId && rep.context && typeof rep.context === 'string') {
+                            if (rep.context && typeof rep.context === 'string') {
                                 if (rep.context.includes(':')) {
+                                    // Ej: "Chat Connection: 8JIR7UUW" -> extrae "8JIR7UUW"
                                     extractedChatId = rep.context.split(':').pop().trim();
                                 } else {
                                     extractedChatId = rep.context.trim();
                                 }
                             }
 
-                            // Buscamos el chat exactamente con ese ID
+                            // 1. Buscamos el chat directamente en la memoria
+                            let relatedConn = null;
                             if (extractedChatId && connections) {
-                                relatedConn = connections.find(c => c.id === extractedChatId);
-                                
-                                // Búsqueda de respaldo simple por si el ID estuviera embebido
-                                if (!relatedConn) {
-                                    relatedConn = connections.find(c => rep.context && rep.context.includes(c.id));
-                                }
+                                relatedConn = connections.find(c => c.id === extractedChatId || c.postId === extractedChatId);
+                            }
+
+                            // 2. EL TRUCO DEFINITIVO: Si el chat no está en la memoria (fue eliminado o es antiguo),
+                            // forzamos la creación de un objeto con ese ID. Al presionar el botón, el panel 
+                            // abrirá ese ID exacto y Firebase descargará los mensajes.
+                            if (!relatedConn && extractedChatId) {
+                                relatedConn = {
+                                    id: extractedChatId,
+                                    postId: extractedChatId,
+                                    fromUid: rep.reporterUid,
+                                    fromName: rep.reporterName,
+                                    toUid: rep.reportedUid,
+                                    toName: rep.reportedName,
+                                    status: 'unknown',
+                                    isDummy: true // Indicador de que forzamos la apertura
+                                };
                             }
 
                             return (
@@ -159,12 +172,15 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                         
                                         <div className="flex flex-col gap-2 mt-3">
                                             <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5">
-                                                <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context || 'Sin contexto'}</span>
+                                                <ExternalLink size={12}/> Contexto: <span className="bg-slate-100 px-1.5 rounded text-slate-600 font-mono font-bold">{rep.context || 'Sin contexto'}</span>
                                             </div>
                                             
-                                            {/* BOTÓN VER CHAT - CON ID EXACTO */}
+                                            {/* =======================================================
+                                                BOTÓN DE AUDITORÍA DIRECTO (SIEMPRE ACTIVO)
+                                            ======================================================= */}
                                             <button
-                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este chat. Es posible que la conexión ya haya sido eliminada de la base de datos.')}
+                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : null}
+                                                disabled={!relatedConn}
                                                 className={`flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-xl transition-colors shadow-sm w-fit ${
                                                     relatedConn 
                                                     ? 'text-white bg-blue-600 border border-blue-700 hover:bg-blue-700 shadow-blue-500/20' 
@@ -172,7 +188,7 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 }`}
                                             >
                                                 <MessageCircle size={14}/> 
-                                                {relatedConn ? `Auditar Chat (${extractedChatId || 'Encontrado'})` : 'Chat eliminado o no encontrado'}
+                                                {relatedConn ? `Ver Chat (${extractedChatId})` : 'Sin ID de Chat'}
                                             </button>
                                         </div>
                                     </td>
