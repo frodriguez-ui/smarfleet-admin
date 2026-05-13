@@ -101,36 +101,26 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
-                            // 🌟 BÚSQUEDA ULTRA-ROBUSTA DEL VIAJE/CHAT (PLAN A, B y C) 🌟
+                            // 🌟 EXTRACCIÓN DIRECTA DEL ID DEL CHAT 🌟
                             let relatedConn = null;
-                            if (connections && connections.length > 0) {
-                                // 1. Búsqueda por ID exacto (Conexión o Publicación)
-                                relatedConn = connections.find(c => 
-                                    (rep.context && typeof rep.context === 'string' && rep.context.includes(c.id)) || 
-                                    (rep.context && typeof rep.context === 'string' && c.postId && rep.context.includes(c.postId)) ||
-                                    (rep.connectionId && rep.connectionId === c.id)
-                                );
+                            let extractedChatId = rep.connectionId;
 
-                                // 2. Búsqueda cruzada por UIDs (Infalible si hay chat activo entre ambos)
-                                if (!relatedConn && rep.reporterUid && rep.reportedUid) {
-                                    const sharedConns = connections.filter(c => {
-                                        const matchArr = c.participants && c.participants.includes(rep.reporterUid) && c.participants.includes(rep.reportedUid);
-                                        const matchDir = (c.fromUid === rep.reporterUid && c.toUid === rep.reportedUid) || (c.fromUid === rep.reportedUid && c.toUid === rep.reporterUid);
-                                        return matchArr || matchDir;
-                                    });
-                                    if (sharedConns.length > 0) {
-                                        // Tomamos el chat más reciente entre estos dos usuarios
-                                        relatedConn = sharedConns.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
-                                    }
+                            // Si el ID viene en el formato "Tracking Viaje: 8JIR7UUW", extraemos lo que está después de los dos puntos
+                            if (!extractedChatId && rep.context && typeof rep.context === 'string') {
+                                if (rep.context.includes(':')) {
+                                    extractedChatId = rep.context.split(':').pop().trim();
+                                } else {
+                                    extractedChatId = rep.context.trim();
                                 }
+                            }
 
-                                // 3. Búsqueda por Nomenclatura Personalizada (RE-, CP-, VP-)
-                                if (!relatedConn && rep.context && typeof rep.context === 'string') {
-                                    const customIdMatch = rep.context.match(/(?:RE|VP|CP)-([A-Z0-9]+)/i);
-                                    if (customIdMatch) {
-                                        const shortId = customIdMatch[1].toLowerCase();
-                                        relatedConn = connections.find(c => c.postId && c.postId.toLowerCase().includes(shortId));
-                                    }
+                            // Buscamos el chat exactamente con ese ID
+                            if (extractedChatId && connections) {
+                                relatedConn = connections.find(c => c.id === extractedChatId);
+                                
+                                // Búsqueda de respaldo simple por si el ID estuviera embebido
+                                if (!relatedConn) {
+                                    relatedConn = connections.find(c => rep.context && rep.context.includes(c.id));
                                 }
                             }
 
@@ -172,9 +162,9 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context || 'Sin contexto'}</span>
                                             </div>
                                             
-                                            {/* BOTÓN VER CHAT - AHORA CON PLAN B INFALIBLE */}
+                                            {/* BOTÓN VER CHAT - CON ID EXACTO */}
                                             <button
-                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque la conexión ya fue eliminada permanentemente por los usuarios o no existe en la base de datos.')}
+                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este chat. Es posible que la conexión ya haya sido eliminada de la base de datos.')}
                                                 className={`flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-xl transition-colors shadow-sm w-fit ${
                                                     relatedConn 
                                                     ? 'text-white bg-blue-600 border border-blue-700 hover:bg-blue-700 shadow-blue-500/20' 
@@ -182,7 +172,7 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 }`}
                                             >
                                                 <MessageCircle size={14}/> 
-                                                {relatedConn ? 'Auditar Viaje / Chat Activo' : 'Viaje no vinculado o eliminado'}
+                                                {relatedConn ? `Auditar Chat (${extractedChatId || 'Encontrado'})` : 'Chat eliminado o no encontrado'}
                                             </button>
                                         </div>
                                     </td>
