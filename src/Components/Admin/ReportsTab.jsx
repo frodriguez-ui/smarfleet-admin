@@ -102,10 +102,12 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const warnings = reportedUser.warningsCount || 0;
 
                             // =======================================================
-                            // ALGORITMO DE EXTRACCIÓN DIRECTA DEL ID DEL CHAT
+                            // ALGORITMO DE EXTRACCIÓN Y FORZADO DEL CHAT
                             // =======================================================
                             let extractedChatId = '';
+                            let relatedConn = null;
 
+                            // 1. Extraer el ID exacto del texto del reporte
                             if (rep.context && typeof rep.context === 'string') {
                                 if (rep.context.includes(':')) {
                                     // Ej: "Chat Connection: 8JIR7UUW" -> extrae "8JIR7UUW"
@@ -115,25 +117,29 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                 }
                             }
 
-                            // 1. Buscamos el chat directamente en la memoria
-                            let relatedConn = null;
-                            if (extractedChatId && connections) {
-                                relatedConn = connections.find(c => c.id === extractedChatId || c.postId === extractedChatId);
+                            // 2. Buscamos en la memoria local por si la conexión ya está cargada
+                            if (connections && connections.length > 0 && extractedChatId) {
+                                relatedConn = connections.find(c => 
+                                    c.id === extractedChatId || 
+                                    (rep.context && rep.context.includes(c.id))
+                                );
                             }
 
-                            // 2. EL TRUCO DEFINITIVO: Si el chat no está en la memoria (fue eliminado o es antiguo),
-                            // forzamos la creación de un objeto con ese ID. Al presionar el botón, el panel 
-                            // abrirá ese ID exacto y Firebase descargará los mensajes.
+                            // 3. EL TRUCO DEFINITIVO: Si el chat está en "contacto iniciado" (y por tanto no bajó 
+                            // a la lista general del admin), forzamos la creación del objeto con ese ID. 
+                            // Al enviar este ID a setViewingConnection, Firebase abrirá la base de datos
+                            // directamente en esa ruta y descargará los mensajes aunque no esté en memoria.
                             if (!relatedConn && extractedChatId) {
                                 relatedConn = {
                                     id: extractedChatId,
-                                    postId: extractedChatId,
+                                    postId: extractedChatId, // Lo dejamos igual como comodín
                                     fromUid: rep.reporterUid,
                                     fromName: rep.reporterName,
                                     toUid: rep.reportedUid,
                                     toName: rep.reportedName,
-                                    status: 'unknown',
-                                    isDummy: true // Indicador de que forzamos la apertura
+                                    status: 'pending',
+                                    tripStatus: 'contact_only',
+                                    isDummy: true 
                                 };
                             }
 
@@ -176,7 +182,7 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                             </div>
                                             
                                             {/* =======================================================
-                                                BOTÓN DE AUDITORÍA DIRECTO (SIEMPRE ACTIVO)
+                                                BOTÓN DE AUDITORÍA DIRECTO (FORZADO AL ID)
                                             ======================================================= */}
                                             <button
                                                 onClick={() => relatedConn ? setViewingConnection(relatedConn) : null}
