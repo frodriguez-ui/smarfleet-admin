@@ -117,28 +117,42 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                 }
                             }
 
-                            // 2. Buscamos en la memoria local por si la conexión ya está cargada
+                            // 2. Buscamos en la memoria local cruzando los IDs cortos
                             if (connections && connections.length > 0 && extractedChatId) {
-                                relatedConn = connections.find(c => 
-                                    c.id === extractedChatId || 
-                                    (rep.context && rep.context.includes(c.id))
-                                );
+                                // Limpiamos la cadena de caracteres basura
+                                const searchId = extractedChatId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+                                
+                                if (searchId) {
+                                    relatedConn = connections.find(c => {
+                                        const cId = c.id.toUpperCase();
+                                        const pId = (c.postId || '').toUpperCase();
+                                        
+                                        // Evaluamos si la conexión de Firebase (cId) INICIA con el ID de 8 caracteres (searchId)
+                                        // Esto es vital porque los chats apenas iniciados usan el connection.id
+                                        return cId === searchId || 
+                                               cId.startsWith(searchId) || 
+                                               pId === searchId || 
+                                               pId.startsWith(searchId) ||
+                                               (rep.context && rep.context.toUpperCase().includes(cId));
+                                    });
+                                }
                             }
 
-                            // 3. EL TRUCO DEFINITIVO: Si el chat está en "contacto iniciado" (y por tanto no bajó 
-                            // a la lista general del admin), forzamos la creación del objeto con ese ID. 
-                            // Al enviar este ID a setViewingConnection, Firebase abrirá la base de datos
-                            // directamente en esa ruta y descargará los mensajes aunque no esté en memoria.
+                            // 3. EL TRUCO DEFINITIVO: Si el chat sigue sin aparecer, creamos
+                            // un objeto comodín COMPLETAMENTE POBLADO. Esto forzará al modal a 
+                            // abrirse y consultar directamente a Firebase sin colapsar la pantalla.
                             if (!relatedConn && extractedChatId) {
                                 relatedConn = {
                                     id: extractedChatId,
-                                    postId: extractedChatId, // Lo dejamos igual como comodín
+                                    postId: extractedChatId,
                                     fromUid: rep.reporterUid,
                                     fromName: rep.reporterName,
                                     toUid: rep.reportedUid,
                                     toName: rep.reportedName,
-                                    status: 'pending',
+                                    participants: [rep.reporterUid, rep.reportedUid], // Campo vital para evitar crashes
+                                    status: 'accepted',
                                     tripStatus: 'contact_only',
+                                    timeline: {},
                                     isDummy: true 
                                 };
                             }
@@ -185,16 +199,20 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 BOTÓN DE AUDITORÍA DIRECTO (FORZADO AL ID)
                                             ======================================================= */}
                                             <button
-                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : null}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    if (relatedConn) setViewingConnection(relatedConn);
+                                                }}
                                                 disabled={!relatedConn}
                                                 className={`flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-xl transition-colors shadow-sm w-fit ${
                                                     relatedConn 
-                                                    ? 'text-white bg-blue-600 border border-blue-700 hover:bg-blue-700 shadow-blue-500/20' 
+                                                    ? 'text-white bg-blue-600 border border-blue-700 hover:bg-blue-700 shadow-blue-500/20 active:scale-95' 
                                                     : 'text-slate-400 bg-slate-50 border border-slate-200 cursor-not-allowed'
                                                 }`}
                                             >
                                                 <MessageCircle size={14}/> 
-                                                {relatedConn ? `Ver Chat (${extractedChatId})` : 'Sin ID de Chat'}
+                                                {relatedConn && !relatedConn.isDummy ? `Auditar Chat (${extractedChatId.substring(0,8)})` : relatedConn && relatedConn.isDummy ? `Forzar Búsqueda (${extractedChatId.substring(0,8)})` : 'Sin ID de Chat'}
                                             </button>
                                         </div>
                                     </td>
