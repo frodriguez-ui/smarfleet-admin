@@ -91,7 +91,7 @@ const loadGoogleMapsScript = (apiKey) => {
 };
 
 // ============================================================================
-// --- COMPONENTES MODULARES (MODALES) ---
+// --- COMPONENTES MODULARES (MODALES REDISEÑADOS Y ELEGANTES) ---
 // ============================================================================
 
 const EditUserModal = ({ user, onClose }) => {
@@ -117,46 +117,46 @@ const EditUserModal = ({ user, onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-[2rem] w-full max-w-md p-8 shadow-2xl animate-in zoom-in-95">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-black text-slate-800">Gestionar Usuario</h3>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={20}/></button>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden border border-slate-100">
+                <div className="flex justify-between items-center p-8 border-b border-slate-50 bg-slate-50/50">
+                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Gestionar Usuario</h3>
+                    <button onClick={onClose} className="p-2 bg-white hover:bg-slate-100 rounded-full transition-colors shadow-sm border border-slate-200 text-slate-500 hover:text-slate-800"><X size={18}/></button>
                 </div>
 
-                <div className="space-y-5">
-                    <div className={`p-4 rounded-2xl border flex items-center justify-between transition-colors ${formData.isSuspended ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                <div className="p-8 space-y-6">
+                    <div className={`p-5 rounded-2xl border flex items-center justify-between transition-colors shadow-sm ${formData.isSuspended ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
                         <div>
                             <p className={`text-xs font-black uppercase tracking-widest flex items-center gap-1.5 ${formData.isSuspended ? 'text-rose-800' : 'text-emerald-800'}`}>
                                 {formData.isSuspended ? <Ban size={14}/> : <CheckCircle size={14}/>}
                                 {formData.isSuspended ? 'Cuenta Suspendida' : 'Cuenta Activa'}
                             </p>
                             <p className={`text-[10px] font-medium mt-1 ${formData.isSuspended ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                {formData.isSuspended ? 'El usuario no puede acceder a la app.' : 'El usuario opera con normalidad.'}
+                                {formData.isSuspended ? 'Usuario bloqueado temporalmente.' : 'Operando con normalidad.'}
                             </p>
                         </div>
                         <button
                             type="button"
                             onClick={() => setFormData({...formData, isSuspended: !formData.isSuspended})}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-sm ${formData.isSuspended ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' : 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'}`}
+                            className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md ${formData.isSuspended ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20' : 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'}`}
                         >
                             {formData.isSuspended ? 'Reactivar' : 'Suspender'}
                         </button>
                     </div>
 
-                    <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Empresa</label>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Empresa</label>
                         <input 
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-800"
+                            className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-slate-800 transition-all"
                             value={formData.businessName || ''}
                             onChange={e => setFormData({...formData, businessName: e.target.value})}
                         />
                     </div>
 
-                    <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Plan de Suscripción</label>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Plan de Suscripción</label>
                         <select 
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-800"
+                            className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 font-bold text-slate-800 transition-all appearance-none cursor-pointer"
                             value={formData.tier || 'free'}
                             onChange={e => setFormData({...formData, tier: e.target.value})}
                         >
@@ -165,27 +165,29 @@ const EditUserModal = ({ user, onClose }) => {
                         </select>
                     </div>
 
-                    <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
+                    <label className="p-5 bg-indigo-50/50 hover:bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between cursor-pointer transition-colors group">
                         <div>
-                            <p className="text-xs font-bold text-blue-800 flex items-center gap-1.5"><Shield size={14}/> Privilegios Admin</p>
-                            <p className="text-[10px] font-medium text-blue-600 mt-1">Permite acceso a este panel.</p>
+                            <p className="text-xs font-black text-indigo-900 flex items-center gap-1.5"><Shield size={14} className="text-indigo-500"/> Privilegios Admin</p>
+                            <p className="text-[10px] font-medium text-indigo-700/70 mt-1">Otorga acceso al panel maestro.</p>
                         </div>
-                        <input 
-                            type="checkbox" 
-                            className="w-5 h-5 accent-blue-600 cursor-pointer"
-                            checked={formData.isAdmin || false}
-                            onChange={e => setFormData({...formData, isAdmin: e.target.checked})}
-                        />
-                    </div>
-                </div>
+                        <div className="relative flex items-center">
+                            <input 
+                                type="checkbox" 
+                                className="w-5 h-5 accent-indigo-600 cursor-pointer rounded"
+                                checked={formData.isAdmin || false}
+                                onChange={e => setFormData({...formData, isAdmin: e.target.checked})}
+                            />
+                        </div>
+                    </label>
 
-                <button 
-                    onClick={handleSave}
-                    disabled={loading}
-                    className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl mt-8 hover:bg-slate-800 transition-all disabled:opacity-50 shadow-xl shadow-slate-900/20"
-                >
-                    {loading ? "Guardando..." : "Actualizar Perfil"}
-                </button>
+                    <button 
+                        onClick={handleSave}
+                        disabled={loading}
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-xl mt-4 transition-all disabled:opacity-50 shadow-xl shadow-slate-900/20 active:scale-[0.98]"
+                    >
+                        {loading ? "Actualizando..." : "Guardar Cambios"}
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -218,131 +220,163 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
     const warnings = user.warningsCount || 0;
 
     return (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
-            <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
+            <div className="bg-slate-50 rounded-[2.5rem] w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden border border-slate-100/50" onClick={e => e.stopPropagation()}>
                 
-                <div className="bg-white px-8 py-6 border-b border-slate-200 flex justify-between items-start shrink-0">
-                    <div className="flex gap-5 items-center min-w-0">
-                        <div className="w-16 h-16 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shrink-0 shadow-sm">
-                            {user.photoData ? <img src={user.photoData} alt="Logo" className="w-full h-full object-cover" /> : <Users size={28}/>}
+                {/* Cabecera Tipo Banner */}
+                <div className="bg-white sticky top-0 z-20 shrink-0 shadow-sm border-b border-slate-100">
+                    <div className="h-20 bg-gradient-to-r from-slate-800 to-slate-900 w-full relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+                        <button onClick={onClose} className="absolute top-5 right-5 p-2 bg-white/10 hover:bg-white/20 text-white backdrop-blur-md rounded-full transition-colors z-30 shadow-sm">
+                            <X size={18}/>
+                        </button>
+                    </div>
+                    
+                    <div className="px-8 pb-6 flex flex-col sm:flex-row gap-5 items-start sm:items-end relative -mt-10">
+                        <div className="w-24 h-24 bg-white rounded-2xl border-4 border-white shadow-lg flex items-center justify-center text-slate-300 overflow-hidden shrink-0 relative z-10">
+                            {user.photoData ? <img src={user.photoData} alt="Logo" className="w-full h-full object-cover" /> : <Users size={32}/>}
                         </div>
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                <h2 className="text-2xl font-black text-slate-800 leading-none truncate">{user.businessName || 'Usuario sin nombre'}</h2>
-                                {user.isSuspended && <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shrink-0"><Ban size={10}/> Suspendido</span>}
-                                {user.isAdmin && <span className="bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shrink-0"><Shield size={10}/> Admin</span>}
-                                
-                                {warnings > 0 && (
-                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shrink-0 ${warnings >= 3 ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-orange-100 text-orange-700'}`}>
-                                        <AlertTriangle size={10}/> {warnings}/3 Amonestaciones
-                                    </span>
-                                )}
+                        
+                        <div className="min-w-0 flex-1 pb-1">
+                            <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                                <h2 className="text-3xl font-black text-slate-900 leading-none tracking-tight truncate">{user.businessName || 'Usuario Sin Nombre'}</h2>
+                                {user.isSuspended && <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shadow-sm"><Ban size={12}/> Suspendido</span>}
+                                {user.isAdmin && <span className="bg-indigo-100 text-indigo-700 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 shadow-sm"><Shield size={12}/> Admin</span>}
                             </div>
-                            <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-500 mt-2">
+                            
+                            <div className="flex flex-wrap items-center gap-2 md:gap-4 text-xs font-medium text-slate-500 mt-2">
                                 <span className="flex items-center gap-1.5"><Mail size={14}/> {user.email || user.id}</span>
                                 {user.phone && <span className="flex items-center gap-1.5"><Phone size={14}/> {user.phone}</span>}
-                                <span className={`px-2 py-0.5 rounded-md font-bold uppercase tracking-wider text-[9px] border ${user.role === 'carrier' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
-                                    {user.role === 'carrier' ? 'Transportista' : 'Generador'}
+                                
+                                <span className="w-1 h-1 rounded-full bg-slate-300 hidden md:block"></span>
+                                
+                                <span className={`px-2.5 py-1 rounded-md font-black uppercase tracking-wider text-[9px] shadow-sm border ${user.role === 'carrier' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                    {user.role === 'carrier' ? 'Transportista' : 'Generador de Carga'}
                                 </span>
-                                <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] border ${user.tier === 'premium' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                    {user.tier === 'premium' ? `PREMIUM (Vence: ${expDate})` : 'FREE'}
+                                <span className={`px-2.5 py-1 rounded-md font-black uppercase tracking-wider text-[9px] shadow-sm border ${user.tier === 'premium' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                    {user.tier === 'premium' ? `PREMIUM (Vence: ${expDate})` : 'FREE TIER'}
                                 </span>
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors shrink-0"><X size={20}/></button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar bg-slate-50">
                     
-                    {warnings >= 3 && !user.isSuspended && (
-                        <div className="bg-red-50 border border-red-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+                    {/* Alerta de Amonestaciones */}
+                    {warnings > 0 && (
+                        <div className={`p-5 rounded-2xl flex items-center justify-between shadow-sm border ${warnings >= 3 ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'}`}>
                             <div>
-                                <h4 className="text-red-800 font-black flex items-center gap-2"><AlertTriangle size={18}/> Alerta Máxima de Moderación</h4>
-                                <p className="text-red-700 text-xs mt-1 font-medium">Este usuario ha acumulado 3 amonestaciones. Te sugerimos ir a "Editar" y suspender su cuenta inmediatamente.</p>
+                                <h4 className={`font-black text-sm flex items-center gap-2 ${warnings >= 3 ? 'text-rose-800' : 'text-amber-800'}`}>
+                                    <AlertTriangle size={18} className={warnings >= 3 ? 'animate-pulse' : ''}/> 
+                                    {warnings >= 3 ? 'Alerta Máxima: Posible Banneo' : 'Historial de Amonestaciones'}
+                                </h4>
+                                <p className={`text-xs mt-1 font-medium ${warnings >= 3 ? 'text-rose-700' : 'text-amber-700'}`}>
+                                    Este usuario tiene {warnings} de 3 amonestaciones permitidas por la comunidad.
+                                </p>
                             </div>
                         </div>
                     )}
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Package size={12}/> Pub. Activas</p>
+                    {/* Tarjetas de Estadísticas */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-center transition-transform hover:-translate-y-1">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center mb-3 text-blue-500"><Package size={20}/></div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Activas</p>
                             <p className="text-3xl font-black text-slate-800">{stats.activePubs}</p>
                         </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><FileText size={12}/> Pub. Totales</p>
+                        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-center transition-transform hover:-translate-y-1">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center mb-3 text-indigo-500"><FileText size={20}/></div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Historial Pub.</p>
                             <p className="text-3xl font-black text-slate-800">{stats.totalPubs}</p>
                         </div>
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1"><LinkIcon size={12}/> Interacciones</p>
+                        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-center transition-transform hover:-translate-y-1">
+                            <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center mb-3 text-purple-500"><LinkIcon size={20}/></div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Interacciones</p>
                             <p className="text-3xl font-black text-slate-800">{stats.totalConns}</p>
                         </div>
-                        <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm flex flex-col justify-center">
-                            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center gap-1"><CheckCircle size={12}/> Viajes Exitosos</p>
-                            <p className="text-3xl font-black text-emerald-700">{stats.completedTrips}</p>
+                        <div className="bg-emerald-50 p-5 rounded-3xl border border-emerald-100 shadow-sm flex flex-col justify-center transition-transform hover:-translate-y-1">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center mb-3 text-emerald-600"><CheckCircle size={20}/></div>
+                            <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest mb-0.5">Viajes Exitosos</p>
+                            <p className="text-3xl font-black text-emerald-800">{stats.completedTrips}</p>
                         </div>
                     </div>
 
-                    <div className="grid lg:grid-cols-2 gap-8">
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                                    <Package size={16} className="text-blue-500"/> Historial de Publicaciones
-                                </h3>
+                    {/* Contenedores Duales: Publicaciones y Conexiones */}
+                    <div className="grid lg:grid-cols-2 gap-6 md:gap-8">
+                        
+                        {/* Historial de Publicaciones */}
+                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[450px]">
+                            <div className="p-5 border-b border-slate-100 bg-white sticky top-0 shrink-0 z-10 flex items-center gap-3">
+                                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Package size={18}/></div>
+                                <div>
+                                    <h3 className="font-black text-slate-800 text-sm">Publicaciones</h3>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Historial de mercado</p>
+                                </div>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/30">
+                            <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar bg-slate-50/30">
                                 {userPubs.length > 0 ? userPubs.map(pub => (
-                                    <div key={pub.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm text-sm flex justify-between items-center gap-3">
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-slate-700 truncate flex items-center gap-1.5">
-                                                {pub.originCity} <ArrowRight size={12} className="text-slate-300"/> {pub.destinationCity}
+                                    <div key={pub.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-sm flex flex-col gap-3 hover:border-blue-200 transition-colors">
+                                        <div className="flex justify-between items-start gap-2">
+                                            <p className="font-black text-slate-800 flex items-center gap-2 truncate">
+                                                {pub.originCity} <ArrowRight size={14} className="text-slate-300 shrink-0"/> {pub.destinationCity}
                                             </p>
-                                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                                                <span className="font-mono bg-slate-100 px-1 rounded">{pub.customId || pub.id.substring(0,6)}</span>
-                                                <span>•</span>
-                                                <span className="flex items-center gap-1"><Calendar size={10}/> {pub.date || 'Fija'}</span>
-                                            </div>
+                                            <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border shrink-0 ${pub.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : pub.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                                {pub.status}
+                                            </span>
                                         </div>
-                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 ${pub.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : pub.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                                            {pub.status.toUpperCase()}
-                                        </span>
+                                        <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                            <span className="font-mono text-slate-600 bg-white px-1.5 py-0.5 rounded shadow-sm border border-slate-200">ID: {pub.customId || pub.id.substring(0,6)}</span>
+                                            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                            <span className="flex items-center gap-1.5"><Calendar size={12}/> {pub.date || 'Ruta Fija'}</span>
+                                        </div>
                                     </div>
                                 )) : (
-                                    <p className="text-center text-slate-400 text-xs py-10 font-medium">No tiene publicaciones.</p>
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <Package size={32} className="mb-2 opacity-20"/>
+                                        <p className="text-xs font-medium">Sin publicaciones.</p>
+                                    </div>
                                 )}
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
-                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                                    <LinkIcon size={16} className="text-purple-500"/> Interacciones en la Red
-                                </h3>
+                        {/* Historial de Interacciones */}
+                        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[450px]">
+                            <div className="p-5 border-b border-slate-100 bg-white sticky top-0 shrink-0 z-10 flex items-center gap-3">
+                                <div className="p-2 bg-purple-50 text-purple-600 rounded-lg"><LinkIcon size={18}/></div>
+                                <div>
+                                    <h3 className="font-black text-slate-800 text-sm">Interacciones</h3>
+                                    <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Contactos en red</p>
+                                </div>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-slate-50/30">
+                            <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar bg-slate-50/30">
                                 {userConns.length > 0 ? userConns.map(conn => {
                                     const otherName = conn.fromUid === user.id ? conn.toName : conn.fromName;
                                     const isSender = conn.fromUid === user.id;
                                     const targetStatus = conn.tripStatus || conn.status;
                                     
                                     return (
-                                    <div key={conn.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm text-sm flex justify-between items-center gap-3">
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-bold text-slate-700 truncate">
-                                                Con: <span className="text-blue-600">{otherName}</span>
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500">
-                                                <span>{isSender ? 'Solicitó contactar' : 'Recibió solicitud'}</span>
-                                                <span>•</span>
-                                                <span className="font-mono">{new Date(conn.createdAt?.seconds * 1000 || Date.now()).toLocaleDateString()}</span>
+                                    <div key={conn.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm text-sm flex flex-col gap-3 hover:border-purple-200 transition-colors">
+                                        <div className="flex justify-between items-start gap-2">
+                                            <div className="min-w-0">
+                                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Conectado con:</p>
+                                                <p className="font-black text-slate-800 truncate">{otherName}</p>
                                             </div>
+                                            <span className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border shrink-0 ${targetStatus === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : targetStatus === 'terminated' ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                                {targetStatus}
+                                            </span>
                                         </div>
-                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 ${targetStatus === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : targetStatus === 'terminated' ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                                            {targetStatus.toUpperCase()}
-                                        </span>
+                                        <div className="flex items-center gap-3 text-[10px] text-slate-500 font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                            <span className="flex items-center gap-1.5"><Activity size={12}/> {isSender ? 'Emisor' : 'Receptor'}</span>
+                                            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                            <span className="flex items-center gap-1.5"><Calendar size={12}/> {new Date(conn.createdAt?.seconds * 1000 || Date.now()).toLocaleDateString('es-MX')}</span>
+                                        </div>
                                     </div>
                                 )}) : (
-                                    <p className="text-center text-slate-400 text-xs py-10 font-medium">No tiene interacciones registradas.</p>
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <LinkIcon size={32} className="mb-2 opacity-20"/>
+                                        <p className="text-xs font-medium">Sin interacciones registradas.</p>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -585,89 +619,164 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
-            <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
+            <div className="bg-white rounded-[2.5rem] w-full max-w-6xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-300 overflow-hidden border border-slate-100/50" onClick={e => e.stopPropagation()}>
                 
-                <div className="bg-white px-6 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center shrink-0">
+                {/* --- CABECERA ELEGANTE --- */}
+                <div className="bg-white px-6 py-5 md:px-8 border-b border-slate-100 flex justify-between items-center sticky top-0 z-30 shrink-0">
                     <div className="flex items-center gap-4 min-w-0">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isDisputed ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-600'}`}>
-                            {isDisputed ? <AlertTriangle size={24}/> : <LinkIcon size={24}/>}
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-inner border border-white ${isDisputed ? 'bg-rose-100 text-rose-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                            {isDisputed ? <AlertTriangle size={20}/> : <LinkIcon size={20}/>}
                         </div>
                         <div className="min-w-0">
-                            <h2 className="text-xl font-black text-slate-800 leading-none flex flex-wrap items-center gap-2">
-                                Detalles de Operación {isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">En Disputa</span>}
+                            <h2 className="text-xl font-black text-slate-900 leading-none flex items-center gap-3">
+                                Detalles de Operación
+                                {isDisputed && <span className="bg-rose-600 text-white text-[9px] px-2.5 py-1 rounded-md uppercase tracking-widest shadow-sm shadow-rose-500/30">Disputa Activa</span>}
                             </h2>
-                            <p className="text-xs text-slate-500 font-mono mt-1.5 truncate flex flex-wrap items-center gap-3 md:gap-4">
-                                <span>CONN: {conn.id}</span>
-                                <button onClick={handleForceDelete} className="text-red-500 hover:text-red-700 font-bold bg-red-50 px-2 py-0.5 rounded transition-colors flex items-center gap-1 shrink-0"><Trash2 size={12}/> Borrar Forzosamente</button>
-                            </p>
+                            <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500 font-mono">
+                                <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-200 shadow-sm font-bold">ID: {conn.id.substring(0,8).toUpperCase()}</span>
+                                <button onClick={handleForceDelete} className="text-rose-500 hover:text-rose-700 font-bold flex items-center gap-1.5 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 transition-colors">
+                                    <Trash2 size={12}/> Forzar Borrado
+                                </button>
+                            </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors shrink-0"><X size={20}/></button>
+                    <button onClick={onClose} className="p-2.5 bg-slate-50 text-slate-500 hover:bg-slate-200 rounded-full transition-colors border border-slate-200 shadow-sm shrink-0">
+                        <X size={18}/>
+                    </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col gap-5">
+                {/* --- CUERPO DEL MODAL --- */}
+                <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar bg-slate-50/50 flex flex-col gap-6 md:gap-8">
                     
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start md:items-center shrink-0 w-full mb-2 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                    {/* PANEL SUPERIOR: INFO DE RUTA Y PARTICIPANTES LADO A LADO */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         
-                        <div className="flex-1 w-full relative z-10">
-                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><MapPin size={14} className="text-blue-500"/> Ruta de la Operación</h4>
+                        {/* Tarjeta de Ruta */}
+                        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-center">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                            <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <MapPin size={14} className="text-blue-500"/> Información de la Ruta
+                            </h4>
                             {post ? (
-                                <div>
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <span className="font-black text-slate-800 text-sm">{post.originCity || post.originState}</span>
-                                        <ArrowRight size={14} className="text-slate-400 shrink-0"/>
-                                        <span className="font-black text-slate-800 text-sm">{post.destinationCity || post.destinationState}</span>
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/30"></div>
+                                        <span className="font-black text-slate-800 text-base">{post.originCity || post.originState}</span>
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-2 mt-3">
-                                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">
-                                            POST ID: {post.customId || post.id.substring(0,8).toUpperCase()}
+                                    <div className="w-0.5 h-5 bg-slate-200 ml-1 mb-2 rounded-full"></div>
+                                    <div className="flex items-center gap-3 mb-5">
+                                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30"></div>
+                                        <span className="font-black text-slate-800 text-base">{post.destinationCity || post.destinationState}</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-100">
+                                        <span className="text-[10px] font-mono font-bold bg-slate-50 text-slate-500 px-2 py-1 rounded-md border border-slate-200 shadow-sm">
+                                            POST: {post.customId || post.id.substring(0,8).toUpperCase()}
                                         </span>
-                                        <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 flex items-center gap-1">
-                                            <Truck size={10}/> {post.vehicleType || post.loadType || 'Vehículo no espec.'}
+                                        <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md border border-indigo-100 flex items-center gap-1.5 shadow-sm">
+                                            <Truck size={12}/> {post.vehicleType || post.loadType || 'Vehículo no especificado'}
                                         </span>
                                     </div>
                                 </div>
                             ) : (
-                                <span className="text-slate-500 text-xs font-medium bg-slate-50 p-2 rounded-lg border border-slate-100 block w-max">Publicación original archivada o eliminada.</span>
+                                <div className="text-center p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                                    <span className="text-slate-500 text-xs font-bold">Publicación original archivada o eliminada.</span>
+                                </div>
                             )}
                         </div>
 
-                        <div className="flex-1 w-full border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col gap-3 relative z-10">
-                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users size={14} className="text-emerald-500"/> Participantes a Evaluar</h4>
-                            <div className="flex items-center justify-between bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100 transition-colors hover:bg-emerald-50">
-                                <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5"><Package size={12}/> Generador</span>
-                                <button onClick={(e) => { e.stopPropagation(); setViewingUser(shipperUser); }} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1.5 bg-white px-3 py-1.5 rounded shadow-sm border border-slate-200 hover:border-blue-300">
-                                    <span className="truncate max-w-[120px]">{shipperUser?.businessName || shipperUser?.id.substring(0,6)}</span> <Eye size={14}/>
-                                </button>
-                            </div>
-                            <div className="flex items-center justify-between bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 transition-colors hover:bg-indigo-50">
-                                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5"><Truck size={12}/> Transportista</span>
-                                <button onClick={(e) => { e.stopPropagation(); setViewingUser(carrierUser); }} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1.5 bg-white px-3 py-1.5 rounded shadow-sm border border-slate-200 hover:border-blue-300">
-                                    <span className="truncate max-w-[120px]">{carrierUser?.businessName || carrierUser?.id.substring(0,6)}</span> <Eye size={14}/>
-                                </button>
+                        {/* Tarjeta de Participantes */}
+                        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                            <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                <Users size={14} className="text-emerald-500"/> Actores Logísticos
+                            </h4>
+                            <div className="space-y-3">
+                                {/* Generador */}
+                                <div className="flex items-center justify-between bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 transition-all hover:bg-emerald-50 hover:shadow-sm">
+                                    <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-md bg-emerald-100 flex items-center justify-center text-emerald-600"><Package size={12}/></div>
+                                        Generador
+                                    </span>
+                                    <button onClick={(e) => { e.stopPropagation(); setViewingUser(shipperUser); }} className="text-xs font-bold text-slate-700 hover:text-emerald-700 transition-colors flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200 hover:border-emerald-300">
+                                        <span className="truncate max-w-[140px]">{shipperUser?.businessName || shipperUser?.id.substring(0,6)}</span> <Eye size={14} className="text-emerald-500"/>
+                                    </button>
+                                </div>
+                                {/* Transportista */}
+                                <div className="flex items-center justify-between bg-blue-50/50 p-4 rounded-2xl border border-blue-100 transition-all hover:bg-blue-50 hover:shadow-sm">
+                                    <span className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-md bg-blue-100 flex items-center justify-center text-blue-600"><Truck size={12}/></div>
+                                        Transportista
+                                    </span>
+                                    <button onClick={(e) => { e.stopPropagation(); setViewingUser(carrierUser); }} className="text-xs font-bold text-slate-700 hover:text-blue-700 transition-colors flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-slate-200 hover:border-blue-300">
+                                        <span className="truncate max-w-[140px]">{carrierUser?.businessName || carrierUser?.id.substring(0,6)}</span> <Eye size={14} className="text-blue-500"/>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto hide-scrollbar shrink-0">
-                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Truck size={14}/> Hoja de Ruta Operativa</h4>
-                        <div className="min-w-[600px] relative px-4 pb-2">
-                            <div className="absolute top-5 left-[3.5rem] right-[3.5rem] h-1 bg-slate-100 rounded-full z-0"></div>
-                            <div className="absolute top-5 left-[3.5rem] h-1 bg-emerald-500 rounded-full z-0 transition-all duration-700" style={{ width: `calc((100% - 7rem) * ${currentStepIndex / (trackingSteps.length - 1)})` }}></div>
+                    {/* ALERTA DE DISPUTA DESTACADA */}
+                    {isDisputed && (
+                        <div className="bg-rose-50 border-2 border-rose-200 p-6 rounded-3xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-bottom-2">
+                            <div className="w-full md:flex-1">
+                                <h3 className="font-black text-rose-800 text-sm flex items-center gap-2 mb-2"><AlertTriangle size={18}/> Fondos Congelados por Disputa</h3>
+                                <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-inner">
+                                    <p className="text-sm text-slate-700 leading-relaxed"><strong className="text-rose-700">Motivo de queja:</strong> "{conn.disputeDetails?.reason || 'No especificado'}"</p>
+                                    <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">Apertura: {conn.disputeDetails?.openedByName}</p>
+                                </div>
+                            </div>
+                            
+                            {isFunded ? (
+                                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto shrink-0">
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'carrier')}
+                                        className="h-12 px-5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <Truck size={16}/>} Dar la razón a Transportista
+                                    </button>
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'shipper')}
+                                        className="h-12 px-5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-lg shadow-rose-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={16} className="animate-spin"/> : <RotateCcw size={16}/>} Reembolsar a Generador
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-[11px] font-black uppercase tracking-widest text-rose-600 px-6 py-4 bg-white border border-rose-200 rounded-2xl text-center shadow-sm">
+                                    El pago se hizo externamente.<br/>Requiere arbitraje manual off-platform.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TIMELINE HORIZONTAL FLUIDO */}
+                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm w-full overflow-x-auto hide-scrollbar">
+                        <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest mb-8 flex items-center gap-2">
+                            <Clock size={14} className="text-slate-500"/> Línea de Tiempo Operativa
+                        </h4>
+                        <div className="min-w-[700px] relative px-6 pb-4">
+                            {/* Línea Base Gris */}
+                            <div className="absolute top-6 left-[4rem] right-[4rem] h-1.5 bg-slate-100 rounded-full z-0"></div>
+                            {/* Línea de Progreso Verde */}
+                            <div className="absolute top-6 left-[4rem] h-1.5 bg-emerald-500 rounded-full z-0 transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `calc((100% - 8rem) * ${currentStepIndex / (trackingSteps.length - 1)})` }}></div>
 
                             <div className="flex justify-between relative z-10">
                                 {trackingSteps.map((step, idx) => {
                                     const isCompleted = idx <= currentStepIndex;
                                     const isCurrent = idx === currentStepIndex;
                                     return (
-                                        <div key={step.id} className="flex flex-col items-center w-20 relative">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-4 border-white shadow-sm transition-all duration-500 ${isCompleted ? 'bg-emerald-500 text-white scale-110' : 'bg-slate-100 text-slate-400'}`}>
-                                                <step.icon size={16} className={isCurrent && idx !== trackingSteps.length - 1 ? 'animate-pulse' : ''} />
+                                        <div key={step.id} className="flex flex-col items-center w-24 relative group">
+                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border-4 border-white shadow-md transition-all duration-500 ${isCompleted ? 'bg-emerald-500 text-white scale-110 shadow-emerald-500/40' : 'bg-slate-100 text-slate-300'}`}>
+                                                <step.icon size={20} className={isCurrent && idx !== trackingSteps.length - 1 ? 'animate-pulse' : ''} />
                                             </div>
-                                            <p className={`text-[9px] font-black uppercase tracking-wider mt-3 text-center leading-tight ${isCompleted ? 'text-slate-800' : 'text-slate-400'}`}>{step.label}</p>
-                                            <p className="text-[8px] text-slate-500 font-medium text-center mt-1">{step.time ? safeDateStr(step.time) : '--/--/--'}</p>
+                                            <p className={`text-[10px] font-black uppercase tracking-wider mt-4 text-center leading-tight transition-colors ${isCompleted ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                {step.label}
+                                            </p>
+                                            <div className="bg-slate-50 px-2 py-1 rounded-md border border-slate-100 mt-2">
+                                                <p className="text-[9px] text-slate-500 font-bold text-center">{step.time ? safeDateStr(step.time) : '--/--/--'}</p>
+                                            </div>
                                         </div>
                                     )
                                 })}
@@ -675,141 +784,106 @@ const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispu
                         </div>
                     </div>
 
-                    {/* Disputa */}
-                    {isDisputed && (
-                        <div className="bg-red-50 border border-red-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
-                            <div className="w-full md:flex-1">
-                                <h3 className="font-black text-red-800 text-xs flex items-center gap-1.5 mb-1.5"><AlertTriangle size={14}/> Disputa Activa (Fondos Congelados)</h3>
-                                <p className="text-[11px] text-red-700 leading-tight"><strong>Motivo:</strong> "{conn.disputeDetails?.reason || 'No especificado'}" — <span className="opacity-80">Abierta por: {conn.disputeDetails?.openedByName}</span></p>
-                            </div>
-                            
-                            {isFunded ? (
-                                <div className="flex flex-row gap-2 mt-1 md:mt-0 w-full md:w-auto shrink-0">
-                                    <button 
-                                        disabled={resolvingDispute === conn.id}
-                                        onClick={() => handleResolveDispute(conn, 'carrier')}
-                                        className="flex-1 md:flex-none py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                                    >
-                                        {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <Truck size={14}/>} 
-                                        Pagar a Transp.
-                                    </button>
-                                    <button 
-                                        disabled={resolvingDispute === conn.id}
-                                        onClick={() => handleResolveDispute(conn, 'shipper')}
-                                        className="flex-1 md:flex-none py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                                    >
-                                        {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <RotateCcw size={14}/>} 
-                                        Reembolsar
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="text-[10px] font-bold text-red-600 px-3 py-1.5 bg-red-100 rounded-lg w-full md:w-auto text-center shrink-0">
-                                    Pago externo. Intervención manual requerida.
-                                </div>
-                            )}
+                    {/* ACUERDO COMERCIAL Y FINANZAS */}
+                    <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div>
+                            <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                                <DollarSign size={14} className="text-slate-500"/> Acuerdo Comercial Final
+                            </h4>
+                            <p className="text-3xl md:text-4xl font-black text-slate-900 tracking-tighter">
+                                ${Number(conn.proposalAmount || 0).toLocaleString()} <span className="text-lg font-bold text-slate-400">MXN</span>
+                            </p>
                         </div>
-                    )}
-
-                    {/* Reportes de Usuarios */}
-                    {connReports.length > 0 && (
-                        <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl shadow-sm flex flex-col items-start justify-between gap-4 shrink-0">
-                            <div className="w-full">
-                                <h3 className="font-black text-orange-800 text-xs flex items-center gap-1.5 mb-2"><Flag size={14}/> Reportes de Usuarios ({connReports.length})</h3>
-                                <div className="grid gap-2">
-                                    {connReports.map(rep => (
-                                        <div key={rep.id} className="text-[11px] text-orange-700 bg-white/60 p-3 rounded-lg border border-orange-200">
-                                            <p className="mb-1"><strong>Motivo:</strong> "{rep.reason}"</p>
-                                            {rep.details && <p className="italic text-orange-600 mb-2">"{rep.details}"</p>}
-                                            <div className="flex justify-between items-center bg-orange-100/50 p-1.5 rounded text-[9px] font-bold">
-                                                <span>Denunciado: <span className="font-black text-orange-800">{rep.reportedName}</span></span>
-                                                <span className="text-orange-600">Reportó: {rep.reporterName}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
+                        <div className="flex flex-col md:items-end gap-2 w-full md:w-auto">
+                            <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border shadow-sm w-full md:w-auto text-center ${
+                                conn.paymentStatus === 'funded' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 
+                                conn.paymentStatus === 'released' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                                conn.paymentStatus === 'refunded' ? 'bg-slate-100 border-slate-200 text-slate-600' :
+                                'bg-slate-50 border-slate-200 text-slate-500'
+                            }`}>
+                                {conn.paymentStatus === 'funded' ? 'Pago Seguro en Bóveda' : 
+                                 conn.paymentStatus === 'released' ? 'Fondos Transferidos' :
+                                 conn.paymentStatus === 'refunded' ? 'Reembolso Emitido' :
+                                 conn.paymentStatus || 'Pendiente de Fondeo'}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                                Vía: {conn.proposalEscrow ? <span className="text-indigo-600 flex items-center gap-1"><ShieldCheck size={12}/> Stripe (Pago Seguro)</span> : <span className="text-slate-600 flex items-center gap-1"><HeartHandshake size={12}/> Acuerdo Directo</span>}
                             </div>
                         </div>
-                    )}
+                    </div>
 
-                    <div className="flex flex-col lg:flex-row gap-5 h-[500px] md:h-[450px]">
+                    {/* ZONA DE MAPA Y CHAT DIVIDIDA A LA MITAD 50/50 */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[600px]">
                         
-                        <div className="w-full lg:w-1/2 flex flex-col gap-5 h-full">
-                            
-                            <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
-                                <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
-                                <div className="flex justify-between items-end mb-3">
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase">Monto Acordado</p>
-                                        <p className="text-2xl font-black text-slate-800">${Number(conn.proposalAmount || 0).toLocaleString()} MXN</p>
-                                    </div>
-                                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${conn.paymentStatus === 'funded' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
-                                        {conn.paymentStatus === 'funded' ? 'Pago Seguro Retenido' : conn.paymentStatus || 'Pendiente'}
-                                    </div>
+                        {/* PANEL MAPA */}
+                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full relative">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none z-0"></div>
+                            <div className="p-5 border-b border-slate-100 bg-white/80 backdrop-blur-md shrink-0 z-10 flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MapPin size={16} className="text-emerald-500"/> Monitoreo Satelital</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Rastreo GPS del viaje</p>
                                 </div>
-                                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
-                                    <span className="font-bold text-slate-600">Vía:</span> 
-                                    {conn.proposalEscrow ? <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded flex items-center gap-1"><ShieldCheck size={12}/> Stripe (Seguro)</span> : <span className="text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1"><HeartHandshake size={12}/> Por fuera</span>}
-                                </div>
+                                {conn.liveLocation && (
+                                    <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                                        <Activity size={10} className="animate-pulse"/> En Vivo
+                                    </span>
+                                )}
                             </div>
 
-                            <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[300px]">
-                                <div className="flex justify-between items-center mb-4 shrink-0">
-                                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Trayecto Real</h4>
-                                    {conn.liveLocation && (
-                                        <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5">
-                                            <Activity size={10} className="animate-pulse"/> Último GPS detectado
-                                        </span>
-                                    )}
-                                </div>
-
-                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner">
-                                    {mapError ? (
-                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-rose-50 p-6 text-center m-2 rounded-xl border-2 border-rose-200 shadow-inner">
-                                            <AlertTriangle size={32} className="text-rose-500 mb-3"/>
-                                            <p className="text-xs font-black uppercase tracking-widest text-rose-800 mb-1.5">No se pudo cargar el mapa</p>
-                                            <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Es posible que el dominio no esté autorizado en las restricciones de tu API Key de Google Cloud.</p>
-                                        </div>
-                                    ) : (
-                                        <div ref={mapRef} className="absolute inset-0 flex items-center justify-center bg-slate-50">
-                                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                                <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
-                                                <p className="text-[10px] font-bold uppercase tracking-widest">Iniciando Google Maps...</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full">
-                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
-                                <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
-                                <p className="text-[10px] text-slate-500 font-medium mt-1">Los administradores tienen acceso de solo lectura para auditoría y resolución de disputas.</p>
-                            </div>
-                            
-                            <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-4">
-                                {isLoadingChat ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                        <Activity size={32} className="mb-2 opacity-50 animate-spin"/>
-                                        <p className="text-xs font-bold">Cargando conversación...</p>
-                                    </div>
-                                ) : messages.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                                        <MessageCircle size={32} className="mb-2 opacity-50"/>
-                                        <p className="text-xs font-bold">No hay mensajes registrados</p>
+                            <div className="flex-1 relative bg-slate-100 w-full h-full z-0">
+                                {mapError ? (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 bg-rose-50/50 p-6 text-center m-4 rounded-2xl border-2 border-dashed border-rose-200">
+                                        <AlertTriangle size={32} className="text-rose-400 mb-3"/>
+                                        <p className="text-xs font-black uppercase tracking-widest text-rose-800 mb-2">Error de Conexión GMaps</p>
+                                        <p className="text-[11px] text-rose-600 font-medium">Revisa las restricciones de tu API Key en la consola de Google Cloud.</p>
                                     </div>
                                 ) : (
-                                    messages.map(m => {
-                                        const isFromShipper = m.senderId === conn.fromUid;
+                                    <div ref={mapRef} className="absolute inset-0 flex items-center justify-center">
+                                        <div className="flex flex-col items-center justify-center text-slate-400 animate-pulse">
+                                            <MapPin size={32} className="mb-3 text-slate-300"/>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest">Iniciando Motor de Mapas...</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* PANEL CHAT */}
+                        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full relative">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none z-0"></div>
+                            <div className="p-5 border-b border-slate-100 bg-white/80 backdrop-blur-md shrink-0 z-10 flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Registro de Conversación</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Auditoría de Lectura (Sólo Lectura)</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex-1 p-5 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-5 z-0">
+                                {isLoadingChat ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <Activity size={32} className="mb-3 opacity-30 animate-spin"/>
+                                        <p className="text-[10px] font-bold uppercase tracking-widest">Descargando Historial...</p>
+                                    </div>
+                                ) : messages.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-white m-4 rounded-2xl border border-dashed border-slate-200">
+                                        <MessageCircle size={32} className="mb-3 opacity-20"/>
+                                        <p className="text-[11px] font-bold text-slate-500">No hay mensajes registrados entre estos usuarios.</p>
+                                    </div>
+                                ) : (
+                                    messages.map((m, i) => {
+                                        const isShipperUser = m.senderId === conn.toUid; // El 'toUid' suele ser el generador si el transportista inició el request, pero varía.
+                                        // Mejor validamos directamente con el UID del emisor del mensaje
+                                        const isFromShipper = m.senderId === shipperUser?.id;
+                                        
                                         return (
-                                            <div key={m.id} className={`flex flex-col w-full ${isFromShipper ? 'items-start' : 'items-end'}`}>
-                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
-                                                    {isFromShipper ? conn.fromName : conn.toName}
+                                            <div key={m.id || i} className={`flex flex-col w-full animate-in slide-in-from-bottom-2 ${isFromShipper ? 'items-start' : 'items-end'}`}>
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-2">
+                                                    {m.senderName || 'Usuario'} {isFromShipper ? '(Generador)' : '(Transportista)'}
                                                 </span>
-                                                <div className={`p-3 rounded-2xl text-xs font-medium shadow-sm max-w-[85%] ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm' : 'bg-blue-600 text-white rounded-tr-sm'}`}>
+                                                <div className={`p-4 text-sm font-medium shadow-sm max-w-[85%] leading-relaxed ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-sm' : 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm shadow-blue-500/20'}`}>
                                                     {m.text || m.message || 'Mensaje de sistema'}
                                                 </div>
-                                                <span className="text-[8px] text-slate-400 mt-1 px-1">{formatMessageTime(m.timestamp)}</span>
+                                                <span className="text-[8px] font-bold text-slate-400 mt-1.5 px-2">{formatMessageTime(m.createdAt)}</span>
                                             </div>
                                         )
                                     })
@@ -882,22 +956,33 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden text-left">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
-      <div className="bg-slate-800 p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-10 border border-slate-700">
-        <div className="w-16 h-16 bg-blue-500 text-white rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-blue-500/20">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden text-left font-sans">
+      <div className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+      </div>
+
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-10 md:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-500">
+        <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mb-8 shadow-xl shadow-blue-500/20 border border-blue-500/50">
           <Shield size={32} />
         </div>
-        <h1 className="text-3xl font-black text-white mb-2 tracking-tight">Admin Smarfleet</h1>
-        <p className="text-slate-400 mb-8 font-medium">Panel de Control Maestro</p>
+        <h1 className="text-3xl md:text-4xl font-black text-white mb-2 tracking-tight">Admin Smarfleet</h1>
+        <p className="text-slate-400 mb-10 font-medium text-sm">Panel de Control Maestro. Acceso restringido.</p>
 
-        {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 rounded-xl mb-6 text-xs font-bold">{error}</div>}
+        {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 rounded-xl mb-6 text-xs font-bold leading-relaxed">{error}</div>}
 
         <form onSubmit={handleLogin} className="space-y-4">
-          <input type="email" placeholder="Email" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" value={email} onChange={e => setEmail(e.target.value)} required />
-          <input type="password" placeholder="Password" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" value={password} onChange={e => setPassword(e.target.value)} required />
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl py-4 mt-4 transition-all uppercase tracking-widest text-xs">
-            {loading ? "Verificando..." : "Ingresar"}
+          <div className="space-y-1.5">
+             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block pl-1">Correo Electrónico</label>
+             <input type="email" placeholder="admin@smarfleet.com" className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-5 py-4 text-white outline-none focus:border-blue-500 focus:bg-slate-900 transition-all text-sm font-medium" value={email} onChange={e => setEmail(e.target.value)} required />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block pl-1">Contraseña de Acceso</label>
+             <input type="password" placeholder="••••••••" className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-5 py-4 text-white outline-none focus:border-blue-500 focus:bg-slate-900 transition-all text-sm font-medium" value={password} onChange={e => setPassword(e.target.value)} required />
+          </div>
+          
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl py-4 mt-8 transition-all uppercase tracking-widest text-xs shadow-lg shadow-blue-600/20 disabled:opacity-50 hover:-translate-y-0.5">
+            {loading ? "Verificando Seguridad..." : "Autorizar Ingreso"}
           </button>
         </form>
       </div>
@@ -1298,49 +1383,49 @@ const AdminDashboard = () => {
       {viewingConnection && <ConnectionDetailModal conn={viewingConnection} onClose={() => setViewingConnection(null)} trips={trips} loads={loads} handleResolveDispute={handleResolveDispute} resolvingDispute={resolvingDispute} users={users} setViewingUser={setViewingUser} />}
       {viewingUser && <UserDetailModal user={viewingUser} onClose={() => setViewingUser(null)} allTrips={trips} allLoads={loads} allConnections={connections} />}
 
-      {/* --- MENÚ LATERAL --- */}
-      <aside className="w-64 bg-slate-900 text-white fixed h-full flex flex-col p-6 z-20 shadow-2xl">
+      {/* --- MENÚ LATERAL REDISEÑADO --- */}
+      <aside className="w-64 bg-slate-900 text-slate-300 fixed h-full flex flex-col p-6 z-20 shadow-2xl border-r border-slate-800">
         <div className="flex items-center gap-3 mb-10">
-            <div className="p-2 bg-blue-600 rounded-lg"><Shield size={20}/></div>
-            <span className="font-black text-xl tracking-tighter">SMAR<span className="text-blue-500">ADMIN</span></span>
+            <div className="p-2 bg-indigo-500/20 rounded-xl border border-indigo-500/30"><Shield size={20} className="text-indigo-400"/></div>
+            <span className="font-black text-xl tracking-tighter text-white">SMAR<span className="text-indigo-400">ADMIN</span></span>
         </div>
         
-        <nav className="flex-1 space-y-2">
-            <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+        <nav className="flex-1 space-y-1.5">
+            <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <BarChart3 size={18}/> Resumen
             </button>
-            <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <Users size={18}/> Usuarios
             </button>
-            <button onClick={() => setActiveTab('publications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'publications' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('publications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'publications' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <Package size={18}/> Publicaciones
             </button>
-            <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <LinkIcon size={18}/> Conexiones
             </button>
-            <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'reports' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-                <Flag size={18}/> Moderación <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full ml-auto">{reports.filter(r=>r.status==='pending').length}</span>
+            <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                <Flag size={18}/> Moderación <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full ml-auto shadow-sm">{reports.filter(r=>r.status==='pending').length}</span>
             </button>
             
             <div className="pt-4 pb-2">
                 <div className="h-px bg-slate-800 w-full mb-2"></div>
             </div>
 
-            <button onClick={() => setActiveTab('notifications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'notifications' ? 'bg-indigo-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-                <Bell size={18}/> Anuncios
+            <button onClick={() => setActiveTab('notifications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'notifications' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                <Bell size={18}/> Anuncios Globales
             </button>
         </nav>
 
-        <button onClick={handleLogout} className="mt-auto flex items-center gap-3 text-slate-400 hover:text-white font-bold text-sm p-4 rounded-xl hover:bg-rose-500/20 hover:text-rose-400 transition-all">
+        <button onClick={handleLogout} className="mt-auto flex items-center gap-3 text-slate-400 hover:text-white font-bold text-sm p-4 rounded-xl hover:bg-rose-500/20 hover:text-rose-400 transition-all border border-transparent hover:border-rose-500/30">
             <LogOut size={18}/> Cerrar Sesión
         </button>
       </aside>
 
       {/* --- ÁREA DE CONTENIDO PRINCIPAL --- */}
-      <main className="ml-64 flex-1 p-10 max-w-7xl">
+      <main className="ml-64 flex-1 p-8 md:p-12 lg:p-16 max-w-7xl mx-auto w-full">
         <header className="mb-10">
-            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h2>
-            <p className="text-slate-500 font-medium mt-1">Monitoreo y métricas en tiempo real de la red Smarfleet</p>
+            <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Panel de Control</h2>
+            <p className="text-slate-500 font-medium mt-2 text-sm md:text-base">Monitoreo y métricas en tiempo real de la red Smarfleet.</p>
         </header>
 
         {/* ALERTA DE ERROR DE BASE DE DATOS */}
