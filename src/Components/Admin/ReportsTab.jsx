@@ -101,10 +101,17 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
-                            // Extraer el ID de la conexión del contexto para buscar la evidencia de forma robusta
+                            // Búsqueda del viaje relacionado más robusta
+                            let connId = null;
                             let relatedConn = null;
+
                             if (rep.context && rep.context.includes('Tracking Viaje:')) {
-                                const connId = rep.context.replace('Tracking Viaje:', '').trim();
+                                connId = rep.context.replace('Tracking Viaje:', '').trim();
+                            } else if (rep.context && rep.context.includes('Viaje:')) {
+                                connId = rep.context.replace('Viaje:', '').trim();
+                            }
+
+                            if (connId && connections) {
                                 relatedConn = connections.find(c => c.id === connId);
                             }
 
@@ -140,18 +147,24 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 <p className="text-xs text-slate-600 italic bg-slate-50 p-2 rounded-lg border border-slate-100">"{rep.details}"</p>
                                             </div>
                                         )}
-                                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                                        
+                                        <div className="flex flex-col gap-2 mt-3">
                                             <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5">
-                                                <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context}</span>
+                                                <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context || 'Sin contexto'}</span>
                                             </div>
-                                            {relatedConn && (
-                                                <button
-                                                    onClick={() => setViewingConnection(relatedConn)}
-                                                    className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
-                                                >
-                                                    <MessageCircle size={14}/> Ver Chat / Detalles
-                                                </button>
-                                            )}
+                                            
+                                            {/* BOTÓN VER CHAT - SIEMPRE VISIBLE PARA SABER SU ESTADO */}
+                                            <button
+                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque fue eliminado de la base de datos o es un reporte antiguo que no guardó el ID de la conexión.')}
+                                                className={`flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm w-fit ${
+                                                    relatedConn 
+                                                    ? 'text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100' 
+                                                    : 'text-slate-400 bg-slate-50 border border-slate-200 cursor-not-allowed'
+                                                }`}
+                                            >
+                                                <MessageCircle size={14}/> 
+                                                {relatedConn ? 'Ver Chat / Detalles' : 'Viaje no vinculado o eliminado'}
+                                            </button>
                                         </div>
                                     </td>
                                     <td className="p-5 text-center">
