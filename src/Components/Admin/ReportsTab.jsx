@@ -44,7 +44,7 @@ export const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange
     );
 };
 
-export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, pagedReports, pageReports, setPageReports, ITEMS_PER_PAGE, safeDateStr, handleIssueWarning, processingWarning, users, setViewingUser, connections, setViewingConnection }) => {
+export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, pagedReports, pageReports, setPageReports, ITEMS_PER_PAGE, safeDateStr, handleIssueWarning, processingWarning, users = [], setViewingUser, connections = [], setViewingConnection }) => {
     
     // Función auxiliar para ver el perfil de un usuario
     const openProfile = (uid) => {
@@ -101,9 +101,12 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
-                            // Extraer el ID de la conexión del contexto para buscar la evidencia
-                            const connIdMatch = rep.context?.match(/Tracking Viaje: (.+)/);
-                            const relatedConn = connIdMatch ? connections?.find(c => c.id === connIdMatch[1]) : null;
+                            // Extraer el ID de la conexión del contexto para buscar la evidencia de forma robusta
+                            let relatedConn = null;
+                            if (rep.context && rep.context.includes('Tracking Viaje:')) {
+                                const connId = rep.context.replace('Tracking Viaje:', '').trim();
+                                relatedConn = connections.find(c => c.id === connId);
+                            }
 
                             return (
                                 <tr key={rep.id} className={`transition-colors ${isPending ? 'bg-orange-50/20 hover:bg-orange-50/40' : 'hover:bg-slate-50/50'}`}>
@@ -144,9 +147,9 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                             {relatedConn && (
                                                 <button
                                                     onClick={() => setViewingConnection(relatedConn)}
-                                                    className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-1 rounded transition-colors shadow-sm"
+                                                    className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                                                 >
-                                                    <MessageCircle size={12}/> Ver Chat / Detalles
+                                                    <MessageCircle size={14}/> Ver Chat / Detalles
                                                 </button>
                                             )}
                                         </div>
