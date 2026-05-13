@@ -101,28 +101,35 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
-                            // 🌟 BÚSQUEDA ULTRA-ROBUSTA DEL VIAJE/CHAT 🌟
+                            // 🌟 BÚSQUEDA ULTRA-ROBUSTA DEL VIAJE/CHAT (PLAN A, B y C) 🌟
                             let relatedConn = null;
                             if (connections && connections.length > 0) {
-                                // 1. Buscar coincidencia exacta por texto (Contexto del Reporte)
+                                // 1. Búsqueda por ID exacto (Conexión o Publicación)
                                 relatedConn = connections.find(c => 
-                                    (rep.context && rep.context.includes(c.id)) || 
-                                    (rep.context && c.postId && rep.context.includes(c.postId)) ||
+                                    (rep.context && typeof rep.context === 'string' && rep.context.includes(c.id)) || 
+                                    (rep.context && typeof rep.context === 'string' && c.postId && rep.context.includes(c.postId)) ||
                                     (rep.connectionId && rep.connectionId === c.id)
                                 );
 
-                                // 2. PLAN B (INFALIBLE): Si no lo encontró por texto, buscamos 
-                                // la conexión en la que AMBOS usuarios participan.
+                                // 2. Búsqueda cruzada por UIDs (Infalible si hay chat activo entre ambos)
                                 if (!relatedConn && rep.reporterUid && rep.reportedUid) {
-                                    const sharedConns = connections.filter(c => 
-                                        c.participants && 
-                                        c.participants.includes(rep.reporterUid) && 
-                                        c.participants.includes(rep.reportedUid)
-                                    );
-                                    
-                                    // Si tienen un chat/conexión activa juntos, tomamos la más reciente
+                                    const sharedConns = connections.filter(c => {
+                                        const matchArr = c.participants && c.participants.includes(rep.reporterUid) && c.participants.includes(rep.reportedUid);
+                                        const matchDir = (c.fromUid === rep.reporterUid && c.toUid === rep.reportedUid) || (c.fromUid === rep.reportedUid && c.toUid === rep.reporterUid);
+                                        return matchArr || matchDir;
+                                    });
                                     if (sharedConns.length > 0) {
+                                        // Tomamos el chat más reciente entre estos dos usuarios
                                         relatedConn = sharedConns.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0];
+                                    }
+                                }
+
+                                // 3. Búsqueda por Nomenclatura Personalizada (RE-, CP-, VP-)
+                                if (!relatedConn && rep.context && typeof rep.context === 'string') {
+                                    const customIdMatch = rep.context.match(/(?:RE|VP|CP)-([A-Z0-9]+)/i);
+                                    if (customIdMatch) {
+                                        const shortId = customIdMatch[1].toLowerCase();
+                                        relatedConn = connections.find(c => c.postId && c.postId.toLowerCase().includes(shortId));
                                     }
                                 }
                             }
@@ -167,7 +174,7 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                             
                                             {/* BOTÓN VER CHAT - AHORA CON PLAN B INFALIBLE */}
                                             <button
-                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque la conexión ya fue eliminada permanentemente por los usuarios.')}
+                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque la conexión ya fue eliminada permanentemente por los usuarios o no existe en la base de datos.')}
                                                 className={`flex items-center justify-center gap-1.5 text-[10px] font-bold px-3 py-2 rounded-xl transition-colors shadow-sm w-fit ${
                                                     relatedConn 
                                                     ? 'text-white bg-blue-600 border border-blue-700 hover:bg-blue-700 shadow-blue-500/20' 
