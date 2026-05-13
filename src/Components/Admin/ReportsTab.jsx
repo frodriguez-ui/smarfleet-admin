@@ -101,18 +101,14 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
-                            // Búsqueda del viaje relacionado más robusta
-                            let connId = null;
+                            // 🌟 NUEVA BÚSQUEDA ULTRA-ROBUSTA DEL VIAJE 🌟
                             let relatedConn = null;
-
-                            if (rep.context && rep.context.includes('Tracking Viaje:')) {
-                                connId = rep.context.replace('Tracking Viaje:', '').trim();
-                            } else if (rep.context && rep.context.includes('Viaje:')) {
-                                connId = rep.context.replace('Viaje:', '').trim();
-                            }
-
-                            if (connId && connections) {
-                                relatedConn = connections.find(c => c.id === connId);
+                            if (connections && connections.length > 0) {
+                                relatedConn = connections.find(c => 
+                                    (rep.context && rep.context.includes(c.id)) || 
+                                    (rep.context && c.postId && rep.context.includes(c.postId)) ||
+                                    (rep.connectionId && rep.connectionId === c.id)
+                                );
                             }
 
                             return (
@@ -153,9 +149,9 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context || 'Sin contexto'}</span>
                                             </div>
                                             
-                                            {/* BOTÓN VER CHAT - SIEMPRE VISIBLE PARA SABER SU ESTADO */}
+                                            {/* BOTÓN VER CHAT - ULTRA ROBUSTO */}
                                             <button
-                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque fue eliminado de la base de datos o es un reporte antiguo que no guardó el ID de la conexión.')}
+                                                onClick={() => relatedConn ? setViewingConnection(relatedConn) : alert('No podemos abrir este viaje porque fue eliminado de la base de datos o el reporte no tiene el ID asignado.')}
                                                 className={`flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm w-fit ${
                                                     relatedConn 
                                                     ? 'text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100' 
