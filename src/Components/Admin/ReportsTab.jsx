@@ -1,8 +1,50 @@
 import React from 'react';
-import { Flag, Search, User as UserIcon, AlertTriangle, CheckCircle, XCircle, Activity, ExternalLink } from 'lucide-react';
-import { Pagination } from './Pagination';
+import { Flag, Search, User as UserIcon, AlertTriangle, CheckCircle, XCircle, Activity, ExternalLink, MessageCircle, ChevronLeft } from 'lucide-react';
 
-export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, pagedReports, pageReports, setPageReports, ITEMS_PER_PAGE, safeDateStr, handleIssueWarning, processingWarning, users, setViewingUser }) => {
+export const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange }) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (totalPages <= 1) return null;
+
+    return (
+        <div className="flex flex-col items-center gap-3 p-6 bg-white border-t border-slate-100">
+            <div className="flex items-center gap-1.5">
+                <button 
+                    disabled={currentPage === 1} 
+                    onClick={() => onPageChange(currentPage - 1)} 
+                    className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors text-slate-600 shadow-sm"
+                >
+                    <ChevronLeft size={16} />
+                </button>
+                <div className="flex items-center gap-1">
+                    {[...Array(totalPages)].map((_, i) => {
+                        const pageNum = i + 1;
+                        return (
+                            <button 
+                                key={pageNum} 
+                                onClick={() => onPageChange(pageNum)} 
+                                className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${currentPage === pageNum ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            >
+                                {pageNum}
+                            </button>
+                        );
+                    })}
+                </div>
+                <button 
+                    disabled={currentPage === totalPages} 
+                    onClick={() => onPageChange(currentPage + 1)} 
+                    className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-30 transition-colors text-slate-600 shadow-sm rotate-180"
+                >
+                    <ChevronLeft size={16} />
+                </button>
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
+                Página {currentPage} de {totalPages} ({totalItems} resultados)
+            </p>
+        </div>
+    );
+};
+
+export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, pagedReports, pageReports, setPageReports, ITEMS_PER_PAGE, safeDateStr, handleIssueWarning, processingWarning, users, setViewingUser, connections, setViewingConnection }) => {
     
     // Función auxiliar para ver el perfil de un usuario
     const openProfile = (uid) => {
@@ -59,6 +101,10 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                             const reportedUser = users.find(u => u.id === rep.reportedUid) || {};
                             const warnings = reportedUser.warningsCount || 0;
 
+                            // Extraer el ID de la conexión del contexto para buscar la evidencia
+                            const connIdMatch = rep.context?.match(/Tracking Viaje: (.+)/);
+                            const relatedConn = connIdMatch ? connections?.find(c => c.id === connIdMatch[1]) : null;
+
                             return (
                                 <tr key={rep.id} className={`transition-colors ${isPending ? 'bg-orange-50/20 hover:bg-orange-50/40' : 'hover:bg-slate-50/50'}`}>
                                     <td className="p-5">
@@ -91,8 +137,18 @@ export const ReportsTab = ({ reportsFilter, setReportsFilter, filteredReports, p
                                                 <p className="text-xs text-slate-600 italic bg-slate-50 p-2 rounded-lg border border-slate-100">"{rep.details}"</p>
                                             </div>
                                         )}
-                                        <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 mt-2">
-                                            <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context}</span>
+                                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                                            <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5">
+                                                <ExternalLink size={12}/> Origen: <span className="bg-slate-100 px-1.5 rounded">{rep.context}</span>
+                                            </div>
+                                            {relatedConn && (
+                                                <button
+                                                    onClick={() => setViewingConnection(relatedConn)}
+                                                    className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-2 py-1 rounded transition-colors shadow-sm"
+                                                >
+                                                    <MessageCircle size={12}/> Ver Chat / Detalles
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-5 text-center">
