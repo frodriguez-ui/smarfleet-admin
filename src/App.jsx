@@ -353,6 +353,478 @@ const UserDetailModal = ({ user, onClose, allTrips, allLoads, allConnections }) 
     );
 };
 
+const ConnectionDetailModal = ({ conn, onClose, trips, loads, handleResolveDispute, resolvingDispute, users, setViewingUser }) => {
+    const [messages, setMessages] = useState([]);
+    const [trackingHistory, setTrackingHistory] = useState([]);
+    const [connReports, setConnReports] = useState([]); 
+    const [isLoadingChat, setIsLoadingChat] = useState(true);
+    const [mapError, setMapError] = useState(false);
+    
+    const mapRef = useRef(null);
+    const messagesEndRef = useRef(null); 
+
+    const post = [...trips, ...loads].find(p => p.id === conn.postId);
+    const isDisputed = conn.isDisputed === true || conn.tripStatus === 'disputed';
+    const isFunded = conn.paymentStatus === 'funded';
+
+    const fromUser = users.find(u => u.id === conn.fromUid) || { businessName: conn.fromName, id: conn.fromUid, role: 'unknown' };
+    const toUser = users.find(u => u.id === conn.toUid) || { businessName: conn.toName, id: conn.toUid, role: 'unknown' };
+
+    let carrierUser = null;
+    let shipperUser = null;
+
+    if (post?.type === 'load') {
+        shipperUser = toUser;
+        carrierUser = fromUser;
+    } else if (post?.type === 'trip') {
+        carrierUser = toUser;
+        shipperUser = fromUser;
+    } else {
+        carrierUser = fromUser.role === 'carrier' ? fromUser : toUser;
+        shipperUser = fromUser.role === 'shipper' ? fromUser : toUser;
+    }
+
+    const googleApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+
+    // CARGAR CHAT Y TRACKING 
+    useEffect(() => {
+        setIsLoadingChat(true);
+
+        const qMsg = collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'messages');
+        const unsubMsg = onSnapshot(qMsg, snap => {
+            const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            msgs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+            setMessages(msgs);
+            setIsLoadingChat(false);
+        }, (err) => {
+            console.error("Error cargando chat:", err);
+            setIsLoadingChat(false);
+        });
+
+        const qTrack = collection(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id, 'trackingLogs');
+        const unsubTrack = onSnapshot(qTrack, snap => {
+            const logs = snap.docs.map(d => d.data());
+            let combined = [...(conn.trackingHistory || []), ...logs];
+            
+            const unique = [];
+            const seen = new Set();
+            combined.forEach(item => {
+                const lat = item.lat || item.latitude;
+                const lng = item.lng || item.longitude;
+                if(lat !== undefined && lng !== undefined) {
+                    const key = `${lat}-${lng}`;
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        unique.push(item);
+                    }
+                }
+            });
+            unique.sort((a,b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+            setTrackingHistory(unique);
+        }, (err) => {
+            console.warn("Aviso: No se cargó trackingLogs.", err);
+            if (conn.trackingHistory && Array.isArray(conn.trackingHistory)) {
+                setTrackingHistory(conn.trackingHistory);
+            }
+        });
+
+        return () => { unsubMsg(); unsubTrack(); };
+    }, [conn.id, JSON.stringify(conn.trackingHistory)]);
+
+    useEffect(() => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages]);
+
+    useEffect(() => {
+        const qReports = query(
+            collection(db, 'artifacts', projectId, 'public', 'data', 'reports'),
+            where('context', '==', `Tracking Viaje: ${conn.id}`)
+        );
+        const unsubReports = onSnapshot(qReports, snap => {
+            setConnReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (err) => {
+            console.error("Error cargando reportes:", err);
+        });
+        
+        return () => unsubReports();
+    }, [conn.id]);
+
+    useEffect(() => {
+        if (!googleApiKey || !mapRef.current) return;
+        
+        let isMounted = true;
+
+        loadGoogleMapsScript(googleApiKey)
+            .then(() => {
+                if (!isMounted || !mapRef.current) return;
+                mapRef.current.innerHTML = '';
+                setMapError(false);
+                
+                const map = new window.google.maps.Map(mapRef.current, {
+                    zoom: 5,
+                    center: { lat: 23.6345, lng: -102.5528 }, 
+                    disableDefaultUI: true,
+                    zoomControl: true
+                });
+
+                let realRouteBounds = new window.google.maps.LatLngBounds();
+                let hasRealRoute = false;
+
+                if (trackingHistory.length > 0) {
+                    const routePath = trackingHistory
+                        .map(h => ({ lat: Number(h.lat || h.latitude), lng: Number(h.lng || h.longitude) }))
+                        .filter(p => !isNaN(p.lat) && !isNaN(p.lng) && p.lat !== 0 && p.lng !== 0);
+
+                    if (routePath.length > 0) {
+                        hasRealRoute = true;
+                        new window.google.maps.Polyline({
+                            path: routePath,
+                            geodesic: true,
+                            strokeColor: '#3b82f6', 
+                            strokeOpacity: 1.0,
+                            strokeWeight: 6,
+                            map
+                        });
+                        routePath.forEach(p => realRouteBounds.extend(p));
+                    }
+                }
+
+                const liveLat = conn.liveLocation?.lat || conn.liveLocation?.latitude;
+                const liveLng = conn.liveLocation?.lng || conn.liveLocation?.longitude;
+
+                if (liveLat && liveLng) {
+                    const currentPos = { lat: Number(liveLat), lng: Number(liveLng) };
+                    new window.google.maps.Marker({
+                        position: currentPos,
+                        map,
+                        title: 'Ubicación GPS Actual',
+                        icon: {
+                            path: window.google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: '#ef4444',
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2,
+                        },
+                        zIndex: 999
+                    });
+                    realRouteBounds.extend(currentPos);
+                    hasRealRoute = true;
+                }
+
+                const originStr = post ? (post.exactOriginAddress || `${post.originCity}, ${post.originState}, MX`) : "";
+                const destStr = post ? (post.exactDestinationAddress || `${post.destinationCity}, ${post.destinationState}, MX`) : "";
+
+                if (originStr && destStr) {
+                    const directionsService = new window.google.maps.DirectionsService();
+                    const directionsRenderer = new window.google.maps.DirectionsRenderer({
+                        map,
+                        suppressMarkers: false,
+                        preserveViewport: hasRealRoute, 
+                        polylineOptions: { strokeColor: '#94a3b8', strokeOpacity: 0.6, strokeWeight: 4 }
+                    });
+
+                    directionsService.route({
+                        origin: originStr,
+                        destination: destStr,
+                        travelMode: window.google.maps.TravelMode.DRIVING,
+                    }).then(response => {
+                        directionsRenderer.setDirections(response);
+                        if (hasRealRoute) {
+                            setTimeout(() => {
+                                if (mapRef.current) map.fitBounds(realRouteBounds, 50); 
+                            }, 300);
+                        }
+                    }).catch(e => {
+                        console.warn("No se pudo calcular la ruta planeada gris", e);
+                        if (hasRealRoute) {
+                            setTimeout(() => {
+                                if (mapRef.current) map.fitBounds(realRouteBounds, 50);
+                            }, 300);
+                        }
+                    });
+                } else if (hasRealRoute) {
+                    setTimeout(() => {
+                        if (mapRef.current) map.fitBounds(realRouteBounds, 50);
+                    }, 300);
+                }
+            })
+            .catch((err) => {
+                console.error("Error al cargar Google Maps:", err);
+                if (isMounted) setMapError(true);
+            });
+
+        return () => { isMounted = false; };
+    }, [trackingHistory, post, conn.liveLocation, googleApiKey]);
+
+    const tl = conn.timeline || {};
+    const trackingSteps = [
+        { id: 'created', label: "Creado", time: conn.createdAt, icon: FileText },
+        { id: 'assigned', label: "Asignado", time: tl.assigned || tl.confirmed, icon: CheckCircle },
+        { id: 'loading', label: "Cargando", time: tl.cargando || tl.en_ruta_origen || tl.en_ruta_a_origen, icon: Package },
+        { id: 'transit', label: "En Tránsito", time: tl.en_transito, icon: Activity },
+        { id: 'delivered', label: "Entregado", time: tl.entregado || tl.delivered, icon: MapPin },
+        { id: 'completed', label: "Finalizado", time: tl.completed || tl.terminated, icon: ShieldCheck }
+    ];
+
+    let currentStepIndex = 0;
+    trackingSteps.forEach((s, i) => { if (s.time) currentStepIndex = i; });
+
+    // 🔥 PUERTA TRASERA: BORRADO FORZADO DE VIAJE EN CONFLICTO 🔥
+    const handleForceDelete = async () => {
+        if (!window.confirm("🚨 ADVERTENCIA: Estás a punto de forzar el borrado de esta conexión de la base de datos. Esta acción no se puede deshacer y puede afectar historiales. ¿Proceder?")) return;
+        try {
+            await deleteDoc(doc(db, 'artifacts', projectId, 'public', 'data', 'connections', conn.id));
+            alert("Conexión borrada exitosamente. Por favor actualiza la página.");
+            onClose();
+        } catch (error) {
+            alert("Error al borrar conexión: " + error.message);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
+            <div className="bg-slate-50 rounded-[2rem] w-full max-w-5xl max-h-[95vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 overflow-hidden" onClick={e => e.stopPropagation()}>
+                
+                <div className="bg-white px-6 py-4 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-4 min-w-0">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${isDisputed ? 'bg-red-100 text-red-600' : 'bg-purple-100 text-purple-600'}`}>
+                            {isDisputed ? <AlertTriangle size={24}/> : <LinkIcon size={24}/>}
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-xl font-black text-slate-800 leading-none flex flex-wrap items-center gap-2">
+                                Detalles de Operación {isDisputed && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest shrink-0">En Disputa</span>}
+                            </h2>
+                            <p className="text-xs text-slate-500 font-mono mt-1.5 truncate flex flex-wrap items-center gap-3 md:gap-4">
+                                <span>CONN: {conn.id}</span>
+                                <button onClick={handleForceDelete} className="text-red-500 hover:text-red-700 font-bold bg-red-50 px-2 py-0.5 rounded transition-colors flex items-center gap-1 shrink-0"><Trash2 size={12}/> Borrar Forzosamente</button>
+                            </p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-full transition-colors shrink-0"><X size={20}/></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col gap-5">
+                    
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start md:items-center shrink-0 w-full mb-2 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                        
+                        <div className="flex-1 w-full relative z-10">
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><MapPin size={14} className="text-blue-500"/> Ruta de la Operación</h4>
+                            {post ? (
+                                <div>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <span className="font-black text-slate-800 text-sm">{post.originCity || post.originState}</span>
+                                        <ArrowRight size={14} className="text-slate-400 shrink-0"/>
+                                        <span className="font-black text-slate-800 text-sm">{post.destinationCity || post.destinationState}</span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">
+                                            POST ID: {post.customId || post.id.substring(0,8).toUpperCase()}
+                                        </span>
+                                        <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 flex items-center gap-1">
+                                            <Truck size={10}/> {post.vehicleType || post.loadType || 'Vehículo no espec.'}
+                                        </span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <span className="text-slate-500 text-xs font-medium bg-slate-50 p-2 rounded-lg border border-slate-100 block w-max">Publicación original archivada o eliminada.</span>
+                            )}
+                        </div>
+
+                        <div className="flex-1 w-full border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 flex flex-col gap-3 relative z-10">
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users size={14} className="text-emerald-500"/> Participantes a Evaluar</h4>
+                            <div className="flex items-center justify-between bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100 transition-colors hover:bg-emerald-50">
+                                <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5"><Package size={12}/> Generador</span>
+                                <button onClick={(e) => { e.stopPropagation(); setViewingUser(shipperUser); }} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1.5 bg-white px-3 py-1.5 rounded shadow-sm border border-slate-200 hover:border-blue-300">
+                                    <span className="truncate max-w-[120px]">{shipperUser?.businessName || shipperUser?.id.substring(0,6)}</span> <Eye size={14}/>
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-between bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 transition-colors hover:bg-indigo-50">
+                                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5"><Truck size={12}/> Transportista</span>
+                                <button onClick={(e) => { e.stopPropagation(); setViewingUser(carrierUser); }} className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1.5 bg-white px-3 py-1.5 rounded shadow-sm border border-slate-200 hover:border-blue-300">
+                                    <span className="truncate max-w-[120px]">{carrierUser?.businessName || carrierUser?.id.substring(0,6)}</span> <Eye size={14}/>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-sm w-full overflow-x-auto hide-scrollbar shrink-0">
+                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Truck size={14}/> Hoja de Ruta Operativa</h4>
+                        <div className="min-w-[600px] relative px-4 pb-2">
+                            <div className="absolute top-5 left-[3.5rem] right-[3.5rem] h-1 bg-slate-100 rounded-full z-0"></div>
+                            <div className="absolute top-5 left-[3.5rem] h-1 bg-emerald-500 rounded-full z-0 transition-all duration-700" style={{ width: `calc((100% - 7rem) * ${currentStepIndex / (trackingSteps.length - 1)})` }}></div>
+
+                            <div className="flex justify-between relative z-10">
+                                {trackingSteps.map((step, idx) => {
+                                    const isCompleted = idx <= currentStepIndex;
+                                    const isCurrent = idx === currentStepIndex;
+                                    return (
+                                        <div key={step.id} className="flex flex-col items-center w-20 relative">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-4 border-white shadow-sm transition-all duration-500 ${isCompleted ? 'bg-emerald-500 text-white scale-110' : 'bg-slate-100 text-slate-400'}`}>
+                                                <step.icon size={16} className={isCurrent && idx !== trackingSteps.length - 1 ? 'animate-pulse' : ''} />
+                                            </div>
+                                            <p className={`text-[9px] font-black uppercase tracking-wider mt-3 text-center leading-tight ${isCompleted ? 'text-slate-800' : 'text-slate-400'}`}>{step.label}</p>
+                                            <p className="text-[8px] text-slate-500 font-medium text-center mt-1">{step.time ? safeDateStr(step.time) : '--/--/--'}</p>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Disputa */}
+                    {isDisputed && (
+                        <div className="bg-red-50 border border-red-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
+                            <div className="w-full md:flex-1">
+                                <h3 className="font-black text-red-800 text-xs flex items-center gap-1.5 mb-1.5"><AlertTriangle size={14}/> Disputa Activa (Fondos Congelados)</h3>
+                                <p className="text-[11px] text-red-700 leading-tight"><strong>Motivo:</strong> "{conn.disputeDetails?.reason || 'No especificado'}" — <span className="opacity-80">Abierta por: {conn.disputeDetails?.openedByName}</span></p>
+                            </div>
+                            
+                            {isFunded ? (
+                                <div className="flex flex-row gap-2 mt-1 md:mt-0 w-full md:w-auto shrink-0">
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'carrier')}
+                                        className="flex-1 md:flex-none py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <Truck size={14}/>} 
+                                        Pagar a Transp.
+                                    </button>
+                                    <button 
+                                        disabled={resolvingDispute === conn.id}
+                                        onClick={() => handleResolveDispute(conn, 'shipper')}
+                                        className="flex-1 md:flex-none py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        {resolvingDispute === conn.id ? <Activity size={14} className="animate-spin"/> : <RotateCcw size={14}/>} 
+                                        Reembolsar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-[10px] font-bold text-red-600 px-3 py-1.5 bg-red-100 rounded-lg w-full md:w-auto text-center shrink-0">
+                                    Pago externo. Intervención manual requerida.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Reportes de Usuarios */}
+                    {connReports.length > 0 && (
+                        <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl shadow-sm flex flex-col items-start justify-between gap-4 shrink-0">
+                            <div className="w-full">
+                                <h3 className="font-black text-orange-800 text-xs flex items-center gap-1.5 mb-2"><Flag size={14}/> Reportes de Usuarios ({connReports.length})</h3>
+                                <div className="grid gap-2">
+                                    {connReports.map(rep => (
+                                        <div key={rep.id} className="text-[11px] text-orange-700 bg-white/60 p-3 rounded-lg border border-orange-200">
+                                            <p className="mb-1"><strong>Motivo:</strong> "{rep.reason}"</p>
+                                            {rep.details && <p className="italic text-orange-600 mb-2">"{rep.details}"</p>}
+                                            <div className="flex justify-between items-center bg-orange-100/50 p-1.5 rounded text-[9px] font-bold">
+                                                <span>Denunciado: <span className="font-black text-orange-800">{rep.reportedName}</span></span>
+                                                <span className="text-orange-600">Reportó: {rep.reporterName}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col lg:flex-row gap-5 h-[500px] md:h-[450px]">
+                        
+                        <div className="w-full lg:w-1/2 flex flex-col gap-5 h-full">
+                            
+                            <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm shrink-0">
+                                <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><DollarSign size={14}/> Acuerdo Comercial</h4>
+                                <div className="flex justify-between items-end mb-3">
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase">Monto Acordado</p>
+                                        <p className="text-2xl font-black text-slate-800">${Number(conn.proposalAmount || 0).toLocaleString()} MXN</p>
+                                    </div>
+                                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${conn.paymentStatus === 'funded' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
+                                        {conn.paymentStatus === 'funded' ? 'Pago Seguro Retenido' : conn.paymentStatus || 'Pendiente'}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100 text-xs">
+                                    <span className="font-bold text-slate-600">Vía:</span> 
+                                    {conn.proposalEscrow ? <span className="text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded flex items-center gap-1"><ShieldCheck size={12}/> Stripe (Seguro)</span> : <span className="text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded flex items-center gap-1"><HeartHandshake size={12}/> Por fuera</span>}
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-[300px]">
+                                <div className="flex justify-between items-center mb-4 shrink-0">
+                                    <h4 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14}/> Trayecto Real</h4>
+                                    {conn.liveLocation && (
+                                        <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5">
+                                            <Activity size={10} className="animate-pulse"/> Último GPS detectado
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="w-full flex-1 bg-slate-100 rounded-xl overflow-hidden relative border border-slate-200 shadow-inner">
+                                    {mapError ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 bg-rose-50 p-6 text-center m-2 rounded-xl border-2 border-rose-200 shadow-inner">
+                                            <AlertTriangle size={32} className="text-rose-500 mb-3"/>
+                                            <p className="text-xs font-black uppercase tracking-widest text-rose-800 mb-1.5">No se pudo cargar el mapa</p>
+                                            <p className="text-[11px] text-rose-600 leading-relaxed font-medium">Es posible que el dominio no esté autorizado en las restricciones de tu API Key de Google Cloud.</p>
+                                        </div>
+                                    ) : (
+                                        <div ref={mapRef} className="absolute inset-0 flex items-center justify-center bg-slate-50">
+                                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                                <MapPin size={24} className="animate-pulse mb-2 text-slate-300"/>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest">Iniciando Google Maps...</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="w-full lg:w-1/2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full">
+                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
+                                <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><MessageCircle size={16} className="text-blue-500"/> Historial de Conversación</h3>
+                                <p className="text-[10px] text-slate-500 font-medium mt-1">Los administradores tienen acceso de solo lectura para auditoría y resolución de disputas.</p>
+                            </div>
+                            
+                            <div className="flex-1 p-4 overflow-y-auto custom-scrollbar bg-slate-50/50 space-y-4">
+                                {isLoadingChat ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <Activity size={32} className="mb-2 opacity-50 animate-spin"/>
+                                        <p className="text-xs font-bold">Cargando conversación...</p>
+                                    </div>
+                                ) : messages.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <MessageCircle size={32} className="mb-2 opacity-50"/>
+                                        <p className="text-xs font-bold">No hay mensajes registrados</p>
+                                    </div>
+                                ) : (
+                                    messages.map(m => {
+                                        const isFromShipper = m.senderId === conn.fromUid;
+                                        return (
+                                            <div key={m.id} className={`flex flex-col w-full ${isFromShipper ? 'items-start' : 'items-end'}`}>
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 px-1">
+                                                    {isFromShipper ? conn.fromName : conn.toName}
+                                                </span>
+                                                <div className={`p-3 rounded-2xl text-xs font-medium shadow-sm max-w-[85%] ${isFromShipper ? 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm' : 'bg-blue-600 text-white rounded-tr-sm'}`}>
+                                                    {m.text || m.message || 'Mensaje de sistema'}
+                                                </div>
+                                                <span className="text-[8px] text-slate-400 mt-1 px-1">{formatMessageTime(m.timestamp)}</span>
+                                            </div>
+                                        )
+                                    })
+                                )}
+                                <div ref={messagesEndRef} />
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ============================================================================
 // --- COMPONENTE: LOGIN DEL ADMIN ---
 // ============================================================================
@@ -901,7 +1373,7 @@ const AdminDashboard = () => {
       </main>
     </div>
   );
-};
+}
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -927,5 +1399,4 @@ export default function App() {
       </Routes>
     </BrowserRouter>
   );
-}
 }
