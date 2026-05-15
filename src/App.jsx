@@ -91,7 +91,7 @@ const loadGoogleMapsScript = (apiKey) => {
 };
 
 // ============================================================================
-// --- COMPONENTES MODULARES (MODALES) ---
+// --- COMPONENTES MODULARES (MODALES ORIGINALES) ---
 // ============================================================================
 
 const EditUserModal = ({ user, onClose }) => {
@@ -882,22 +882,33 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden text-left">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
-      <div className="bg-slate-800 p-10 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-10 border border-slate-700">
-        <div className="w-16 h-16 bg-blue-500 text-white rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-blue-500/20">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden text-left font-sans">
+      <div className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] pointer-events-none"></div>
+      </div>
+
+      <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-10 md:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-500">
+        <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mb-8 shadow-xl shadow-blue-500/20 border border-blue-500/50">
           <Shield size={32} />
         </div>
-        <h1 className="text-3xl font-black text-white mb-2 tracking-tight">Admin Smarfleet</h1>
-        <p className="text-slate-400 mb-8 font-medium">Panel de Control Maestro</p>
+        <h1 className="text-3xl md:text-4xl font-black text-white mb-2 tracking-tight">Admin Smarfleet</h1>
+        <p className="text-slate-400 mb-10 font-medium text-sm">Panel de Control Maestro. Acceso restringido.</p>
 
-        {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 rounded-xl mb-6 text-xs font-bold">{error}</div>}
+        {error && <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 rounded-xl mb-6 text-xs font-bold leading-relaxed">{error}</div>}
 
         <form onSubmit={handleLogin} className="space-y-4">
-          <input type="email" placeholder="Email" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" value={email} onChange={e => setEmail(e.target.value)} required />
-          <input type="password" placeholder="Password" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500" value={password} onChange={e => setPassword(e.target.value)} required />
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl py-4 mt-4 transition-all uppercase tracking-widest text-xs">
-            {loading ? "Verificando..." : "Ingresar"}
+          <div className="space-y-1.5">
+             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block pl-1">Correo Electrónico</label>
+             <input type="email" placeholder="admin@smarfleet.com" className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-5 py-4 text-white outline-none focus:border-blue-500 focus:bg-slate-900 transition-all text-sm font-medium" value={email} onChange={e => setEmail(e.target.value)} required />
+          </div>
+          <div className="space-y-1.5">
+             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block pl-1">Contraseña de Acceso</label>
+             <input type="password" placeholder="••••••••" className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-5 py-4 text-white outline-none focus:border-blue-500 focus:bg-slate-900 transition-all text-sm font-medium" value={password} onChange={e => setPassword(e.target.value)} required />
+          </div>
+          
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl py-4 mt-8 transition-all uppercase tracking-widest text-xs shadow-lg shadow-blue-600/20 disabled:opacity-50 hover:-translate-y-0.5">
+            {loading ? "Verificando Seguridad..." : "Autorizar Ingreso"}
           </button>
         </form>
       </div>
@@ -935,8 +946,8 @@ const AdminDashboard = () => {
   const [connsFilter, setConnsFilter] = useState({ search: '', status: 'all', sortBy: 'recent' });
   const [reportsFilter, setReportsFilter] = useState({ search: '', status: 'pending' });
   
-  // Estado para Gráficas Analíticas
-  const [trendMonthsRange, setTrendMonthsRange] = useState(6);
+  // Estado para Gráficas Analíticas (Ajustado para permitir semanas o meses)
+  const [trendPeriod, setTrendPeriod] = useState('4w');
   const [resolvingDispute, setResolvingDispute] = useState(null); 
   const [processingWarning, setProcessingWarning] = useState(false);
 
@@ -1057,6 +1068,18 @@ const AdminDashboard = () => {
       } catch (error) {
           alert("Error al eliminar: " + error.message);
       }
+  };
+  
+  // Función para manejar el estado de activo a pausado y viceversa en el Admin
+  const handleStatusToggle = async (item) => {
+    try {
+        const collectionName = item.type === 'trip' ? 'trips' : 'loads';
+        const newStatus = item.status === 'active' ? 'paused' : 'active';
+        await updateDoc(doc(db, 'artifacts', projectId, 'public', 'data', collectionName, item.id), { status: newStatus });
+        // No mostramos alert para no interrumpir el flujo del administrador
+    } catch (e) {
+        alert("Error al cambiar el estado: " + e.message);
+    }
   };
 
   const handleDeleteUser = async (userToDelete) => {
@@ -1216,7 +1239,7 @@ const AdminDashboard = () => {
       }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   }, [reports, reportsFilter]);
 
-  // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS ---
+  // --- CÁLCULOS DE ESTADÍSTICAS Y TENDENCIAS ACTUALIZADOS ---
   const stats = useMemo(() => {
       const carriers = users.filter(u => u.role === 'carrier').length;
       const shippers = users.filter(u => u.role === 'shipper').length;
@@ -1232,14 +1255,41 @@ const AdminDashboard = () => {
       const totalKmSaved = completedMatches.length * kmSavedPerMatch;
       const totalCo2SavedTons = ((totalKmSaved * co2KgPerKm) / 1000).toFixed(1);
 
-      const monthsArray = Array.from({length: trendMonthsRange}, (_, i) => {
-          const d = new Date();
-          d.setMonth(d.getMonth() - i);
-          return { 
-              month: d.getMonth(), 
-              year: d.getFullYear(), 
-              label: d.toLocaleString('es-MX', {month: 'short'}).toUpperCase() + ' ' + d.getFullYear().toString().slice(2)
-          };
+      // NUEVAS MÉTRICAS FINANCIERAS Y DE MODERACIÓN
+      const successfulEscrowConns = connections.filter(c => c.paymentStatus === 'released' || c.paymentStatus === 'released_by_dispute' || c.paymentStatus === 'released_penalty');
+      const totalEscrowVolume = successfulEscrowConns.reduce((sum, c) => sum + (Number(c.proposalAmount) || 0), 0);
+      
+      const activeDisputes = connections.filter(c => c.isDisputed === true || c.tripStatus === 'disputed').length;
+      const pendingReportsCount = reports.filter(r => r.status === 'pending').length;
+
+      // LÓGICA DE GRÁFICAS: SEMANAL O MENSUAL
+      const isWeekly = trendPeriod.endsWith('w');
+      const periodsCount = parseInt(trendPeriod); // Extrae 4, 12, 6 o 12
+
+      const periodsArray = Array.from({length: periodsCount}, (_, i) => {
+          if (isWeekly) {
+              const endD = new Date();
+              endD.setDate(endD.getDate() - (i * 7));
+              const startD = new Date(endD);
+              startD.setDate(startD.getDate() - 6);
+              startD.setHours(0,0,0,0);
+              endD.setHours(23,59,59,999);
+              return {
+                  isWeekly: true,
+                  start: startD,
+                  end: endD,
+                  label: `${startD.getDate()} ${startD.toLocaleString('es-MX', {month:'short'})}`
+              };
+          } else {
+              const d = new Date();
+              d.setMonth(d.getMonth() - i);
+              return { 
+                  isWeekly: false,
+                  month: d.getMonth(), 
+                  year: d.getFullYear(), 
+                  label: d.toLocaleString('es-MX', {month: 'short'}).toUpperCase() + ' ' + d.getFullYear().toString().slice(2)
+              };
+          }
       }).reverse();
 
       const getSafeDate = (item) => {
@@ -1250,27 +1300,30 @@ const AdminDashboard = () => {
       let maxUsersCategory = 1;
       let maxPubsCategory = 1;
 
-      const trendsData = monthsArray.map(m => {
-          const mUsers = users.filter(u => {
-              const d = getSafeDate(u);
-              return d.getMonth() === m.month && d.getFullYear() === m.year;
-          });
+      const trendsData = periodsArray.map(p => {
+          const matchItem = (item) => {
+              const d = getSafeDate(item);
+              if (p.isWeekly) {
+                  return d >= p.start && d <= p.end;
+              } else {
+                  return d.getMonth() === p.month && d.getFullYear() === p.year;
+              }
+          };
+
+          const mUsers = users.filter(matchItem);
           const newCarriers = mUsers.filter(u => u.role === 'carrier').length;
           const newShippers = mUsers.filter(u => u.role === 'shipper').length;
           if (newCarriers > maxUsersCategory) maxUsersCategory = newCarriers;
           if (newShippers > maxUsersCategory) maxUsersCategory = newShippers;
 
-          const mPubs = allPublications.filter(p => {
-              const d = getSafeDate(p);
-              return d.getMonth() === m.month && d.getFullYear() === m.year;
-          });
+          const mPubs = allPublications.filter(matchItem);
           const newTrips = mPubs.filter(p => p.type === 'trip').length;
           const newLoads = mPubs.filter(p => p.type === 'load').length;
           if (newTrips > maxPubsCategory) maxPubsCategory = newTrips;
           if (newLoads > maxPubsCategory) maxPubsCategory = newLoads;
 
           return { 
-              ...m, 
+              ...p, 
               newCarriers, newShippers, totalNewUsers: newCarriers + newShippers,
               newTrips, newLoads, totalNewPubs: newTrips + newLoads
           };
@@ -1280,9 +1333,10 @@ const AdminDashboard = () => {
           carriers, shippers, suspended,
           activePubs, completedPubs, pausedPubs,
           totalKmSaved, totalCo2SavedTons, completedMatchesCount: completedMatches.length,
+          totalEscrowVolume, activeDisputes, pendingReportsCount,
           trendsData, maxUsersCategory, maxPubsCategory
       };
-  }, [users, allPublications, connections, trendMonthsRange]);
+  }, [users, allPublications, connections, reports, trendPeriod]);
 
   // Paginación de arreglos finales
   const pagedUsers = filteredUsers.slice((pageUsers - 1) * ITEMS_PER_PAGE, pageUsers * ITEMS_PER_PAGE);
@@ -1298,49 +1352,49 @@ const AdminDashboard = () => {
       {viewingConnection && <ConnectionDetailModal conn={viewingConnection} onClose={() => setViewingConnection(null)} trips={trips} loads={loads} handleResolveDispute={handleResolveDispute} resolvingDispute={resolvingDispute} users={users} setViewingUser={setViewingUser} />}
       {viewingUser && <UserDetailModal user={viewingUser} onClose={() => setViewingUser(null)} allTrips={trips} allLoads={loads} allConnections={connections} />}
 
-      {/* --- MENÚ LATERAL --- */}
-      <aside className="w-64 bg-slate-900 text-white fixed h-full flex flex-col p-6 z-20 shadow-2xl">
+      {/* --- MENÚ LATERAL REDISEÑADO --- */}
+      <aside className="w-64 bg-slate-900 text-slate-300 fixed h-full flex flex-col p-6 z-20 shadow-2xl border-r border-slate-800">
         <div className="flex items-center gap-3 mb-10">
-            <div className="p-2 bg-blue-600 rounded-lg"><Shield size={20}/></div>
-            <span className="font-black text-xl tracking-tighter">SMAR<span className="text-blue-500">ADMIN</span></span>
+            <div className="p-2 bg-indigo-500/20 rounded-xl border border-indigo-500/30"><Shield size={20} className="text-indigo-400"/></div>
+            <span className="font-black text-xl tracking-tighter text-white">SMAR<span className="text-indigo-400">ADMIN</span></span>
         </div>
         
-        <nav className="flex-1 space-y-2">
-            <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+        <nav className="flex-1 space-y-1.5">
+            <button onClick={() => setActiveTab('overview')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'overview' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <BarChart3 size={18}/> Resumen
             </button>
-            <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'users' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <Users size={18}/> Usuarios
             </button>
-            <button onClick={() => setActiveTab('publications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'publications' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('publications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'publications' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <Package size={18}/> Publicaciones
             </button>
-            <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            <button onClick={() => setActiveTab('connections')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'connections' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
                 <LinkIcon size={18}/> Conexiones
             </button>
-            <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'reports' ? 'bg-blue-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-                <Flag size={18}/> Moderación <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full ml-auto">{reports.filter(r=>r.status==='pending').length}</span>
+            <button onClick={() => setActiveTab('reports')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                <Flag size={18}/> Moderación <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full ml-auto shadow-sm">{reports.filter(r=>r.status==='pending').length}</span>
             </button>
             
             <div className="pt-4 pb-2">
                 <div className="h-px bg-slate-800 w-full mb-2"></div>
             </div>
 
-            <button onClick={() => setActiveTab('notifications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'notifications' ? 'bg-indigo-600 shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-                <Bell size={18}/> Anuncios
+            <button onClick={() => setActiveTab('notifications')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'notifications' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' : 'hover:bg-slate-800 hover:text-white'}`}>
+                <Bell size={18}/> Anuncios Globales
             </button>
         </nav>
 
-        <button onClick={handleLogout} className="mt-auto flex items-center gap-3 text-slate-400 hover:text-white font-bold text-sm p-4 rounded-xl hover:bg-rose-500/20 hover:text-rose-400 transition-all">
+        <button onClick={handleLogout} className="mt-auto flex items-center gap-3 text-slate-400 hover:text-white font-bold text-sm p-4 rounded-xl hover:bg-rose-500/20 hover:text-rose-400 transition-all border border-transparent hover:border-rose-500/30">
             <LogOut size={18}/> Cerrar Sesión
         </button>
       </aside>
 
       {/* --- ÁREA DE CONTENIDO PRINCIPAL --- */}
-      <main className="ml-64 flex-1 p-10 max-w-7xl">
+      <main className="ml-64 flex-1 p-8 md:p-12 lg:p-16 max-w-7xl mx-auto w-full">
         <header className="mb-10">
-            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Panel de Control</h2>
-            <p className="text-slate-500 font-medium mt-1">Monitoreo y métricas en tiempo real de la red Smarfleet</p>
+            <h2 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Panel de Control</h2>
+            <p className="text-slate-500 font-medium mt-2 text-sm md:text-base">Monitoreo y métricas en tiempo real de la red Smarfleet.</p>
         </header>
 
         {/* ALERTA DE ERROR DE BASE DE DATOS */}
@@ -1363,10 +1417,13 @@ const AdminDashboard = () => {
         )}
 
         {/* RENDERIZADO MODULAR DE PESTAÑAS */}
-        {activeTab === 'overview' && <OverviewTab stats={stats} users={users} trips={trips} loads={loads} connections={connections} trendMonthsRange={trendMonthsRange} setTrendMonthsRange={setTrendMonthsRange} />}
+        {activeTab === 'overview' && <OverviewTab stats={stats} users={users} trips={trips} loads={loads} connections={connections} trendPeriod={trendPeriod} setTrendPeriod={setTrendPeriod} />}
         {activeTab === 'notifications' && <NotificationsTab notifForm={notifForm} setNotifForm={setNotifForm} handleSendGlobalNotification={handleSendGlobalNotification} sendingNotif={sendingNotif} users={users} />}
         {activeTab === 'users' && <UsersTab usersFilter={usersFilter} setUsersFilter={setUsersFilter} filteredUsers={filteredUsers} pagedUsers={pagedUsers} pageUsers={pageUsers} setPageUsers={setPageUsers} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingUser={setViewingUser} setEditingUser={setEditingUser} handleDeleteUser={handleDeleteUser} safeDateStr={safeDateStr} />}
-        {activeTab === 'publications' && <PublicationsTab pubsFilter={pubsFilter} setPubsFilter={setPubsFilter} filteredPubs={filteredPubs} pagedPubs={pagedPubs} pagePubs={pagePubs} setPagePubs={setPagePubs} ITEMS_PER_PAGE={ITEMS_PER_PAGE} handleDeletePublication={handleDeletePublication} safeDateStr={safeDateStr} />}
+        
+        {/* 🔥 SE AÑADIÓ handleStatusToggle AQUÍ ABAJO 🔥 */}
+        {activeTab === 'publications' && <PublicationsTab pubsFilter={pubsFilter} setPubsFilter={setPubsFilter} filteredPubs={filteredPubs} pagedPubs={pagedPubs} pagePubs={pagePubs} setPagePubs={setPagePubs} ITEMS_PER_PAGE={ITEMS_PER_PAGE} handleDeletePublication={handleDeletePublication} handleStatusToggle={handleStatusToggle} safeDateStr={safeDateStr} />}
+        
         {activeTab === 'connections' && <ConnectionsTab connsFilter={connsFilter} setConnsFilter={setConnsFilter} filteredConns={filteredConns} pagedConns={pagedConns} pageConns={pageConns} setPageConns={setPageConns} ITEMS_PER_PAGE={ITEMS_PER_PAGE} setViewingConnection={setViewingConnection} safeDateStr={safeDateStr} reports={reports} allPublications={allPublications} />}
         {activeTab === 'reports' && <ReportsTab reportsFilter={reportsFilter} setReportsFilter={setReportsFilter} filteredReports={filteredReports} pagedReports={pagedReports} pageReports={pageReports} setPageReports={setPageReports} ITEMS_PER_PAGE={ITEMS_PER_PAGE} safeDateStr={safeDateStr} handleIssueWarning={handleIssueWarning} processingWarning={processingWarning} users={users} setViewingUser={setViewingUser} connections={connections} setViewingConnection={setViewingConnection} />}
 
